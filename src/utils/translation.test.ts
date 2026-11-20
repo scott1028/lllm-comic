@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Box } from '../types';
 import {
+  getIsRetryableStatus,
   getReasoningParams,
+  getRetryDelay,
   getResizedSize,
   layoutText,
   mapBoxToRegion,
@@ -154,5 +156,21 @@ describe('mapBoxToRegion', () => {
   it('keeps boxes unchanged for a full region', () => {
     const box = { x: 0.1, y: 0.2, width: 0.3, height: 0.4 };
     expect(mapBoxToRegion(box, { x: 0, y: 0, width: 1, height: 1 })).toEqual(box);
+  });
+});
+
+describe('getIsRetryableStatus', () => {
+  it('retries server errors and rate limits', () => {
+    expect([500, 502, 503, 504, 429].map(getIsRetryableStatus)).toEqual([true, true, true, true, true]);
+  });
+
+  it('does not retry client errors that need a settings change', () => {
+    expect([400, 401, 403, 404].map(getIsRetryableStatus)).toEqual([false, false, false, false]);
+  });
+});
+
+describe('getRetryDelay', () => {
+  it('doubles from 5s and caps at 60s', () => {
+    expect([0, 1, 2, 3, 4, 10].map(getRetryDelay)).toEqual([5000, 10000, 20000, 40000, 60000, 60000]);
   });
 });

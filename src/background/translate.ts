@@ -2,6 +2,7 @@ import type { Dialogue, TranslationSettings } from '../types';
 import { getBlobDataUrl } from '../utils/blob';
 import { getApiKey, getSettings } from '../utils/settings';
 import {
+  getIsRetryableStatus,
   getReasoningParams,
   getResizedSize,
   getTranslationPrompt,
@@ -14,6 +15,9 @@ const REQUEST_TIMEOUT_MS = 180_000;
 const CACHE_KEY_PREFIX = 'translation:';
 
 type EncodedImage = { dataUrl: string; width: number; height: number };
+
+// Server down, restarting or overloaded: worth retrying later.
+export class RetryableApiError extends Error {}
 
 // One request at a time: local model servers usually run a single job.
 let translationQueue: Promise<unknown> = Promise.resolve();
@@ -45,7 +49,8 @@ const requestDialogues = async (
   translation: TranslationSettings,
   apiKey: string,
 ): Promise<Dialogue[]> => {
-  const response = await fetch(`${translation.apiBaseUrl.replace(/\/+$/, '')}/chat/completions`, {
+  const requestUrl = `${translation.apiBaseUrl.replace(/\/+$/, '')}/chat/completions`;
+  const request: RequestInit = {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -67,9 +72,17 @@ const requestDialogues = async (
       ],
     }),
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
+  };
+  let response: Response;
+  try {
+    response = await fetch(requestUrl, request);
+  } catch (error) {
+    // Connection refused or timed out.
+    throw new RetryableApiError(error instanceof Error ? error.message : String(error));
+  }
   if (!response.ok) {
-    throw new Error(`API ${response.status}: ${(await response.text()).slice(0, 200)}`);
+    const message = `API ${response.status}: ${(await response.text()).slice(0, 200)}`;
+    throw getIsRetryableStatus(response.status) ? new RetryableApiError(message) : new Error(message);
   }
   const completion = await response.json();
   const content = completion?.choices?.[0]?.message?.content;

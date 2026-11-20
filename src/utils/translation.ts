@@ -1,5 +1,8 @@
 import type { Box, Dialogue } from '../types';
 
+const RETRY_BASE_DELAY_MS = 5_000;
+const RETRY_MAX_DELAY_MS = 60_000;
+
 const MIN_FONT_SIZE = 8;
 const MAX_FONT_SIZE = 28;
 const LINE_HEIGHT_RATIO = 1.2;
@@ -20,6 +23,13 @@ export const getTranslationPrompt = (targetLanguage: string): string =>
   'Respond with JSON only, no markdown: ' +
   '{"dialogues":[{"box":[x1,y1,x2,y2],"text":"original text","translation":"translated text"}]}. ' +
   'Box coordinates are integers from 0 to 1000, relative to the image width and height.';
+
+// 5xx and 429 are temporary; other 4xx (bad key, unknown model) need a settings change.
+export const getIsRetryableStatus = (status: number): boolean => status >= 500 || status === 429;
+
+// 5s, 10s, 20s, 40s, then every 60s until the server is back.
+export const getRetryDelay = (attempt: number): number =>
+  Math.min(RETRY_BASE_DELAY_MS * 2 ** attempt, RETRY_MAX_DELAY_MS);
 
 // Extra request fields for the reasoning level.
 export const getReasoningParams = (reasoningEffort: string): Record<string, unknown> => {

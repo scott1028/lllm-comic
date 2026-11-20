@@ -9,7 +9,7 @@ import type {
 } from '../types';
 import { getContentRangeTotal } from '../utils';
 import { captureRegion, TabNotActiveError } from './capture';
-import { translateImage } from './translate';
+import { RetryableApiError, translateImage } from './translate';
 
 const MAX_CONCURRENT_FETCHES = 6;
 
@@ -78,6 +78,7 @@ chrome.runtime.onMessage.addListener(
         (error: unknown) =>
           sendResponse({
             error: error instanceof Error ? error.message : String(error),
+            isRetryable: error instanceof RetryableApiError,
           } satisfies TranslateImageResponse),
       );
       return true;

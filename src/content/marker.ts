@@ -26,7 +26,7 @@ let isRepositionScheduled = false;
 const getStatusText = (translation: TranslationState | undefined): string => {
   if (!translation) return '';
   if (translation.status === 'pending') return ' · 翻譯中…';
-  if (translation.status === 'error') return ' · 翻譯失敗';
+  if (translation.status === 'error') return translation.willRetry ? ' · 翻譯失敗，稍後重試' : ' · 翻譯失敗';
   return ` · 已翻譯 ${translation.dialogues.length} 段`;
 };
 

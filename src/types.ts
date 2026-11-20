@@ -51,12 +51,13 @@ export type Dialogue = { box: Box; text: string; translation: string };
 export type TranslationState =
   | { status: 'pending' }
   | { status: 'done'; dialogues: Dialogue[] }
-  | { status: 'error'; message: string };
+  // willRetry: transient server trouble; the content script retries with backoff.
+  | { status: 'error'; message: string; willRetry: boolean };
 
 // source: data: URL (blob: images are converted in page) or http(s) URL.
 export type TranslateImageMessage = { type: 'TRANSLATE_IMAGE'; source: string };
 
-export type TranslateImageResponse = { dialogues: Dialogue[] } | { error: string };
+export type TranslateImageResponse = { dialogues: Dialogue[] } | { error: string; isRetryable: boolean };
 
 // Screenshot fallback for tainted canvases; rect is the visible part to crop.
 export type CaptureRegionMessage = { type: 'CAPTURE_REGION'; rect: Rect; viewportWidth: number };

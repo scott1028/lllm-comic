@@ -17,7 +17,7 @@ import type {
 import { evaluateRules } from '../utils';
 import { getBlobDataUrl } from '../utils/blob';
 import { getSettings, mergeSettings } from '../utils/settings';
-import { mapBoxToRegion } from '../utils/translation';
+import { getRetryDelay, mapBoxToRegion } from '../utils/translation';
 import { captureCanvasInOrder, CaptureNotReadyError, getIsCaptureReady } from './capture';
 import { collectImages, getCanvasContent, type ImageCandidate } from './collectImages';
 import { overlayRoot, scheduleReposition, updateMarks } from './marker';
@@ -34,6 +34,9 @@ const pendingUrls = new Set<string>();
 const translations = new Map<string, TranslationState>();
 // Bumped when translations are reset, so late responses for old settings are dropped.
 let translationGeneration = 0;
+// Failed attempts so far per URL, for retry backoff.
+const retryAttempts = new Map<string, number>();
+const retryTimers = new Set<ReturnType<typeof setTimeout>>();
 let scanTimer: ReturnType<typeof setTimeout> | undefined;
 let retryScanTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -149,6 +152,25 @@ const scheduleRetryScan = () => {
   }, RETRY_SCAN_MS);
 };
 
+const scheduleTranslationRetry = (url: string, attempt: number) => {
+  retryAttempts.set(url, attempt + 1);
+  const generation = translationGeneration;
+  const timer = setTimeout(() => {
+    retryTimers.delete(timer);
+    if (generation !== translationGeneration) return;
+    // Dropping the failed state lets the next scan request it again.
+    translations.delete(url);
+    scheduleScan();
+  }, getRetryDelay(attempt));
+  retryTimers.add(timer);
+};
+
+const clearTranslationRetries = () => {
+  retryTimers.forEach(clearTimeout);
+  retryTimers.clear();
+  retryAttempts.clear();
+};
+
 // region: set when only part of a canvas was captured; boxes are relative to it.
 type TranslationSource = { source: string; region?: Box };
 
@@ -179,10 +201,17 @@ const requestTranslation = async (url: string, element: Element, isTainted: bool
   try {
     const { source, region } = await getTranslationSource(url, element, isTainted);
     const message: TranslateImageMessage = { type: TRANSLATE_IMAGE, source };
-    const response: TranslateImageResponse = await chrome.runtime.sendMessage(message);
+    let response: TranslateImageResponse;
+    try {
+      response = await chrome.runtime.sendMessage(message);
+    } catch (error) {
+      if (!getIsExtensionContextValid()) throw error;
+      // Service worker went away mid-request (e.g. restarted): try again later.
+      response = { error: error instanceof Error ? error.message : String(error), isRetryable: true };
+    }
     nextState =
       'error' in response
-        ? { status: 'error', message: response.error }
+        ? { status: 'error', message: response.error, willRetry: response.isRetryable }
         : {
             status: 'done',
             dialogues: region
@@ -201,16 +230,28 @@ const requestTranslation = async (url: string, element: Element, isTainted: bool
       scheduleRetryScan();
       return;
     }
-    nextState = { status: 'error', message: error instanceof Error ? error.message : String(error) };
+    nextState = {
+      status: 'error',
+      message: error instanceof Error ? error.message : String(error),
+      willRetry: false,
+    };
   }
   if (generation !== translationGeneration) return;
-  if (nextState.status === 'error') console.warn('[LIS] translation failed:', nextState.message, url.slice(0, 120));
+  if (nextState.status === 'error') {
+    const attempt = retryAttempts.get(url) ?? 0;
+    // Warn once per image, not on every retry while the server is down.
+    if (attempt === 0) console.warn('[LIS] translation failed:', nextState.message, url.slice(0, 120));
+    if (nextState.willRetry) scheduleTranslationRetry(url, attempt);
+  } else {
+    retryAttempts.delete(url);
+  }
   translations.set(url, nextState);
   scheduleScan();
 };
 
 const resetTranslations = () => {
   translations.clear();
+  clearTranslationRetries();
   translationGeneration++;
 };
 
@@ -241,6 +282,7 @@ const stopContentScript = () => {
   document.removeEventListener('visibilitychange', scheduleScan);
   clearTimeout(scanTimer);
   clearTimeout(retryScanTimer);
+  clearTranslationRetries();
   // Stale marks would no longer follow the page.
   updateMarks([]);
   overlayRoot.remove();
