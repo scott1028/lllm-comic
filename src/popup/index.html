@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <title>Large Image Spotter</title>
+    <link rel="stylesheet" href="./popup.css" />
+  </head>
+  <body>
+    <header>
+      <h1>大型圖片偵測</h1>
+      <label class="toggle"><input type="checkbox" id="is-enabled" /> 啟用</label>
+    </header>
+
+    <fieldset>
+      <legend>符合方式</legend>
+      <label><input type="radio" name="match-mode" value="all" /> 全部符合 (AND)</label>
+      <label><input type="radio" name="match-mode" value="any" /> 任一符合 (OR)</label>
+    </fieldset>
+
+    <ul id="rules"></ul>
+    <p id="empty-hint" hidden>沒有規則時，不會標示任何圖片。</p>
+    <button id="add-rule" type="button">+ 新增規則</button>
+
+    <template id="rule-template">
+      <li class="rule">
+        <select name="metric" aria-label="指標">
+          <option value="fileSizeKB">檔案大小</option>
+          <option value="width">寬度</option>
+          <option value="height">高度</option>
+          <option value="oversizeRatio">原圖倍率</option>
+        </select>
+        <select name="operator" aria-label="比較">
+          <option value=">=">≥</option>
+          <option value="<=">≤</option>
+        </select>
+        <input name="value" type="number" min="0" step="any" aria-label="數值" />
+        <span class="unit"></span>
+        <button type="button" class="remove" aria-label="刪除規則">✕</button>
+      </li>
+    </template>
+
+    <script type="module" src="./index.ts"></script>
+  </body>
+</html>

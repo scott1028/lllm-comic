@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Large Image Spotter test page</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 24px; }
+      section { margin-bottom: 32px; }
+      h2 { font-size: 15px; }
+      .hero { height: 200px; background: url(images/hero-bg.jpg) center / cover; }
+      .spacer { height: 1500px; border-left: 2px dashed #ccc; }
+    </style>
+  </head>
+  <body>
+    <p>
+      Serve this folder on two ports, then open <code>http://localhost:8000/</code>.
+      Default rules: ANY of file size &gt;= 500 KB, width &gt;= 2000 px.
+    </p>
+
+    <section>
+      <h2>1. 4000×3000 PNG (41 KB) shown at 400px — width rule → marked</h2>
+      <img src="images/huge-pixels.png" width="400" />
+    </section>
+
+    <section>
+      <h2>2. 1000×750 JPG (863 KB), same origin — size from Resource Timing → marked</h2>
+      <img src="images/heavy.jpg" width="500" />
+    </section>
+
+    <section>
+      <h2>3. 300×200 JPG (2 KB) → not marked</h2>
+      <img src="images/small.jpg" />
+    </section>
+
+    <section>
+      <h2>4. 1000×750 JPG (863 KB), cross origin — size from service worker HEAD → marked</h2>
+      <img src="http://127.0.0.1:8001/images/heavy-cross.jpg" width="500" />
+    </section>
+
+    <section>
+      <h2>5. 1×1 data: URL GIF → not marked</h2>
+      <img
+        src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+        width="40"
+        height="40"
+      />
+    </section>
+
+    <section>
+      <h2>6. Inserted after 2s — MutationObserver → marked</h2>
+      <div id="delayed"></div>
+    </section>
+
+    <section>
+      <h2>7. CSS background 2400×800 (30 KB) — width rule → marked (batch 5)</h2>
+      <div class="hero"></div>
+    </section>
+
+    <section>
+      <h2>8. Hidden 4000×3000 PNG → not marked</h2>
+      <img src="images/huge-pixels.png?hidden" style="display: none" />
+    </section>
+
+    <section>
+      <h2>9. Lazy-loaded JPG below the fold → marked after scrolling</h2>
+      <div class="spacer"></div>
+      <img src="images/heavy.jpg?lazy" width="300" loading="lazy" />
+    </section>
+
+    <script>
+      setTimeout(() => {
+        const img = document.createElement('img');
+        img.src = 'images/huge-pixels.png?delayed';
+        img.width = 300;
+        document.getElementById('delayed').append(img);
+      }, 2000);
+    </script>
+  </body>
+</html>

@@ -1,0 +1,3 @@
+# Keep this project out of the parent pnpm workspace.
+packages:
+  - .
