@@ -16,10 +16,12 @@ import type {
 import { evaluateRules } from '../utils';
 import { getBlobDataUrl } from '../utils/blob';
 import { getSettings, mergeSettings } from '../utils/settings';
-import { collectImages, type ImageCandidate } from './collectImages';
+import { collectImages, getCanvasContentKey, type ImageCandidate } from './collectImages';
 import { overlayRoot, scheduleReposition, updateMarks } from './marker';
 
 const SCAN_DELAY_MS = 500;
+// Readers often create canvases first and draw them later, without any event.
+const BLANK_CANVAS_RETRY_MS = 1000;
 
 let settings: Settings = DEFAULT_SETTINGS;
 // Sizes from the service worker; null = lookup failed.
@@ -30,6 +32,7 @@ const translations = new Map<string, TranslationState>();
 // Bumped when translations are reset, so late responses for old settings are dropped.
 let translationGeneration = 0;
 let scanTimer: ReturnType<typeof setTimeout> | undefined;
+let blankCanvasTimer: ReturnType<typeof setTimeout> | undefined;
 
 // After the extension reloads, this script keeps running in open tabs but chrome.* calls fail.
 const getIsExtensionContextValid = () => Boolean(chrome.runtime?.id);
@@ -45,21 +48,37 @@ const scan = () => {
   }
   const matchedCandidates: ImageCandidate[] = [];
   const unknownUrls = new Set<string>();
+  // Canvases have no file, so judge them by size only.
+  const canvasSettings = {
+    matchMode: settings.matchMode,
+    rules: settings.rules.filter((rule) => rule.metric !== 'fileSizeKB'),
+  };
   for (const candidate of collectImages()) {
     const { metrics } = candidate;
     if (metrics.fileSizeBytes === undefined && fileSizes.has(metrics.url)) {
       metrics.fileSizeBytes = fileSizes.get(metrics.url);
     }
-    const ruleResult = evaluateRules(metrics, settings);
+    const isCanvas = candidate.element instanceof HTMLCanvasElement;
+    const ruleResult = evaluateRules(metrics, isCanvas ? canvasSettings : settings);
     if (ruleResult === true) matchedCandidates.push(candidate);
     else if (ruleResult === 'unknown' && !pendingUrls.has(metrics.url)) unknownUrls.add(metrics.url);
   }
   const isTranslationEnabled = settings.translation.isEnabled;
+  let hasBlankCanvas = false;
   if (isTranslationEnabled) {
-    for (const { metrics } of matchedCandidates) {
-      if (!translations.has(metrics.url)) void requestTranslation(metrics.url);
+    for (const { element, metrics } of matchedCandidates) {
+      if (element instanceof HTMLCanvasElement) {
+        const contentKey = getCanvasContentKey(element);
+        if (!contentKey) {
+          hasBlankCanvas = true;
+          continue;
+        }
+        metrics.url = contentKey;
+      }
+      if (!translations.has(metrics.url)) void requestTranslation(metrics.url, element);
     }
   }
+  if (hasBlankCanvas) scheduleBlankCanvasRetry();
   updateMarks(
     matchedCandidates.map((candidate) => ({
       ...candidate,
@@ -111,14 +130,30 @@ const requestFileSizes = async (urls: string[]) => {
   scheduleScan();
 };
 
-const requestTranslation = async (url: string) => {
+const scheduleBlankCanvasRetry = () => {
+  if (blankCanvasTimer !== undefined) return;
+  blankCanvasTimer = setTimeout(() => {
+    blankCanvasTimer = undefined;
+    scheduleScan();
+  }, BLANK_CANVAS_RETRY_MS);
+};
+
+const getTranslationSource = async (url: string, element: Element): Promise<string> => {
+  // Throws on tainted canvases (cross-origin pixels drawn without CORS).
+  if (element instanceof HTMLCanvasElement) return element.toDataURL('image/jpeg', 0.92);
+  // blob: URLs only resolve inside this page, so send their bytes instead.
+  if (url.startsWith('blob:')) return getBlobDataUrl(await (await fetch(url)).blob());
+  return url;
+};
+
+// url: image URL or canvas content key.
+const requestTranslation = async (url: string, element: Element) => {
   const generation = translationGeneration;
   // Set synchronously so the same scan does not request it twice.
   translations.set(url, { status: 'pending' });
   let nextState: TranslationState;
   try {
-    // blob: URLs only resolve inside this page, so send their bytes instead.
-    const source = url.startsWith('blob:') ? await getBlobDataUrl(await (await fetch(url)).blob()) : url;
+    const source = await getTranslationSource(url, element);
     const message: TranslateImageMessage = { type: TRANSLATE_IMAGE, source };
     const response: TranslateImageResponse = await chrome.runtime.sendMessage(message);
     nextState =
@@ -150,7 +185,10 @@ const getIsOwnMutation = (mutation: MutationRecord) =>
   [...mutation.addedNodes, ...mutation.removedNodes].every((node) => node === overlayRoot);
 
 const mutationObserver = new MutationObserver((mutations) => {
-  if (!mutations.every(getIsOwnMutation)) scheduleScan();
+  if (mutations.every(getIsOwnMutation)) return;
+  // Style/class changes (e.g. page flips by CSS transform) move marks without scrolling.
+  scheduleReposition();
+  scheduleScan();
 });
 
 // img load events do not bubble; listen in the capture phase.
@@ -163,7 +201,10 @@ const stopContentScript = () => {
   document.removeEventListener('load', handleImageLoad, true);
   window.removeEventListener('resize', scheduleScan);
   document.removeEventListener('scroll', scheduleReposition, { capture: true });
+  document.removeEventListener('transitionend', scheduleReposition, true);
+  document.removeEventListener('animationend', scheduleReposition, true);
   clearTimeout(scanTimer);
+  clearTimeout(blankCanvasTimer);
   // Stale marks would no longer follow the page.
   updateMarks([]);
   overlayRoot.remove();
@@ -192,12 +233,15 @@ const init = async () => {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ['src', 'srcset'],
+    attributeFilter: ['src', 'srcset', 'width', 'height', 'style', 'class'],
   });
   document.addEventListener('load', handleImageLoad, true);
   // Display size changes the oversize ratio.
   window.addEventListener('resize', scheduleScan);
   document.addEventListener('scroll', scheduleReposition, { capture: true, passive: true });
+  // CSS transitions end without a mutation; settle marks at the final position.
+  document.addEventListener('transitionend', scheduleReposition, true);
+  document.addEventListener('animationend', scheduleReposition, true);
 };
 
 void init();

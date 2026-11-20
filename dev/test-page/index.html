@@ -72,7 +72,24 @@
     </section>
 
     <section>
-      <h2>11. Lazy-loaded JPG below the fold → marked after scrolling</h2>
+      <h2>11. Same-origin canvas in a 400px overflow:hidden box — marked + translated, overlay cut at the box edge</h2>
+      <div style="width: 400px; overflow: hidden; border: 1px dashed #999">
+        <canvas id="canvas-clipped" width="2000" height="3000" style="width: 600px"></canvas>
+      </div>
+    </section>
+
+    <section>
+      <h2>12. Canvas drawn 3s after load — marked at once, translated only after it is drawn</h2>
+      <canvas id="canvas-delayed" width="2000" height="3000" style="width: 400px"></canvas>
+    </section>
+
+    <section>
+      <h2>13. Cross-origin (tainted) canvas — marked, translation fails ("Tainted canvases may not be exported")</h2>
+      <canvas id="canvas-tainted" width="2000" height="3000" style="width: 400px"></canvas>
+    </section>
+
+    <section>
+      <h2>14. Lazy-loaded JPG below the fold → marked after scrolling</h2>
       <div class="spacer"></div>
       <img src="images/heavy.jpg?lazy" width="300" loading="lazy" />
     </section>
@@ -93,6 +110,16 @@
           img.width = 500;
           document.getElementById('blob').append(img);
         });
+
+      const drawBubbles = (canvasId, src) => {
+        const img = new Image();
+        img.onload = () => document.getElementById(canvasId).getContext('2d').drawImage(img, 0, 0);
+        img.src = src;
+      };
+      drawBubbles('canvas-clipped', 'images/bubbles.jpg?canvas');
+      setTimeout(() => drawBubbles('canvas-delayed', 'images/bubbles.jpg?delayed-canvas'), 3000);
+      // No crossOrigin attribute, so drawing taints the canvas.
+      drawBubbles('canvas-tainted', 'http://127.0.0.1:8001/images/bubbles.jpg');
     </script>
   </body>
 </html>

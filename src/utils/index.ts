@@ -38,6 +38,29 @@ export const evaluateRules = (
   return ruleResults.every((ruleResult) => ruleResult === false) ? false : 'unknown';
 };
 
+export type Rect = { left: number; top: number; right: number; bottom: number };
+
+// Overlap of all rects; undefined when they do not overlap.
+export const getIntersection = (rects: Rect[]): Rect | undefined => {
+  const intersection = {
+    left: Math.max(...rects.map((rect) => rect.left)),
+    top: Math.max(...rects.map((rect) => rect.top)),
+    right: Math.min(...rects.map((rect) => rect.right)),
+    bottom: Math.min(...rects.map((rect) => rect.bottom)),
+  };
+  return intersection.right > intersection.left && intersection.bottom > intersection.top
+    ? intersection
+    : undefined;
+};
+
+// RGBA pixels that are all the same color, e.g. a canvas not drawn yet.
+export const getIsUniformPixels = (pixels: ArrayLike<number>): boolean => {
+  for (let index = 4; index < pixels.length; index++) {
+    if (pixels[index] !== pixels[index % 4]) return false;
+  }
+  return true;
+};
+
 // How many times wider the image is than the screen pixels it occupies.
 export const getOversizeRatio = (
   naturalWidth: number,

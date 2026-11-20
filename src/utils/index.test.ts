@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ImageMetrics, Settings } from '../types';
-import { evaluateRules, getBadgeText, getOversizeRatio } from '.';
+import { evaluateRules, getBadgeText, getIntersection, getIsUniformPixels, getOversizeRatio } from '.';
 
 const bigImage: ImageMetrics = { url: 'a.png', width: 4000, height: 3000, oversizeRatio: 5 };
 
@@ -83,5 +83,36 @@ describe('getBadgeText', () => {
 
   it('omits unknown size and ratio', () => {
     expect(getBadgeText({ url: 'a.png', width: 10, height: 20, fileSizeBytes: null })).toBe('10×20');
+  });
+});
+
+describe('getIsUniformPixels', () => {
+  it('detects a fully transparent or single-color canvas', () => {
+    expect(getIsUniformPixels(new Uint8ClampedArray(16 * 4))).toBe(true);
+    expect(getIsUniformPixels(Uint8ClampedArray.from({ length: 16 * 4 }, () => 255))).toBe(true);
+  });
+
+  it('returns false once any pixel differs', () => {
+    const pixels = Uint8ClampedArray.from({ length: 16 * 4 }, () => 255);
+    pixels[16 * 4 - 2] = 0;
+    expect(getIsUniformPixels(pixels)).toBe(false);
+  });
+});
+
+describe('getIntersection', () => {
+  const page = { left: 100, top: 0, right: 500, bottom: 600 };
+
+  it('cuts a rect to its clipping box', () => {
+    expect(getIntersection([page, { left: 300, top: -50, right: 900, bottom: 400 }])).toEqual({
+      left: 300,
+      top: 0,
+      right: 500,
+      bottom: 400,
+    });
+  });
+
+  it('returns undefined when rects only touch or do not overlap', () => {
+    expect(getIntersection([page, { left: 500, top: 0, right: 800, bottom: 600 }])).toBeUndefined();
+    expect(getIntersection([page, { left: 0, top: 700, right: 800, bottom: 900 }])).toBeUndefined();
   });
 });

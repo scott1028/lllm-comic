@@ -23,13 +23,14 @@ export type Settings = {
 };
 
 export type ImageMetrics = {
+  // Image URL, or a synthetic key for canvases (see collectImages).
   url: string;
   // natural (intrinsic) pixel size
   width: number;
   height: number;
   // undefined when the element is not rendered
   oversizeRatio?: number;
-  // undefined = not looked up yet, null = lookup failed
+  // undefined = not looked up yet, null = lookup failed or no file (canvas)
   fileSizeBytes?: number | null;
 };
 
