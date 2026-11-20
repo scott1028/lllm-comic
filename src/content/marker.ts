@@ -1,4 +1,4 @@
-import type { Dialogue, TranslationState } from '../types';
+import type { Dialogue, Rect, TranslationState } from '../types';
 import { getBadgeText, getIntersection } from '../utils';
 import type { ImageCandidate } from './collectImages';
 import { drawDialogues } from './translationLayer';
@@ -31,7 +31,7 @@ const getStatusText = (translation: TranslationState | undefined): string => {
 };
 
 // Readers clip neighbor pages with overflow: hidden; our fixed overlay must do the same.
-const getClippingAncestors = (element: Element): Element[] => {
+export const getClippingAncestors = (element: Element): Element[] => {
   const ancestors: Element[] = [];
   for (let node = element.parentElement; node && node !== document.body; node = node.parentElement) {
     const { overflowX, overflowY } = getComputedStyle(node);
@@ -39,6 +39,14 @@ const getClippingAncestors = (element: Element): Element[] => {
   }
   return ancestors;
 };
+
+// Part of rect the user can see: viewport and clipping ancestors applied.
+export const getVisibleRect = (rect: DOMRect, clippingAncestors: Element[]): Rect | undefined =>
+  getIntersection([
+    rect,
+    { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight },
+    ...clippingAncestors.map((ancestor) => ancestor.getBoundingClientRect()),
+  ]);
 
 const releaseCanvas = (view: MarkView) => {
   if (!view.canvas || view.drawnSizeKey === undefined) return;
@@ -50,14 +58,9 @@ const releaseCanvas = (view: MarkView) => {
 
 const positionMarks = () => {
   isRepositionScheduled = false;
-  const viewport = { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
   for (const [element, view] of views) {
     const rect = element.getBoundingClientRect();
-    const visibleRect = getIntersection([
-      rect,
-      viewport,
-      ...view.clippingAncestors.map((ancestor) => ancestor.getBoundingClientRect()),
-    ]);
+    const visibleRect = getVisibleRect(rect, view.clippingAncestors);
     // Inline style: `all: initial` in content.css would override the hidden attribute.
     view.badge.style.display = visibleRect ? '' : 'none';
     if (!visibleRect) {

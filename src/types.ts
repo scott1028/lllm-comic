@@ -36,6 +36,9 @@ export type ImageMetrics = {
 
 export type RuleResult = boolean | 'unknown';
 
+// Viewport coordinates in CSS pixels.
+export type Rect = { left: number; top: number; right: number; bottom: number };
+
 export type GetFileSizesMessage = { type: 'GET_FILE_SIZES'; urls: string[] };
 
 export type FileSizes = Record<string, number | null>;
@@ -54,3 +57,9 @@ export type TranslationState =
 export type TranslateImageMessage = { type: 'TRANSLATE_IMAGE'; source: string };
 
 export type TranslateImageResponse = { dialogues: Dialogue[] } | { error: string };
+
+// Screenshot fallback for tainted canvases; rect is the visible part to crop.
+export type CaptureRegionMessage = { type: 'CAPTURE_REGION'; rect: Rect; viewportWidth: number };
+
+// isRetryable: the tab was not in front; try again later instead of failing.
+export type CaptureRegionResponse = { dataUrl: string } | { error: string; isRetryable: boolean };

@@ -4,6 +4,7 @@ import {
   getReasoningParams,
   getResizedSize,
   layoutText,
+  mapBoxToRegion,
   normalizeBox,
   parseDialogues,
   type MeasureTextWidth,
@@ -135,5 +136,23 @@ describe('getReasoningParams', () => {
   it('passes any other value through, including custom ones', () => {
     expect(getReasoningParams('high')).toEqual({ reasoning_effort: 'high' });
     expect(getReasoningParams(' max ')).toEqual({ reasoning_effort: 'max' });
+  });
+});
+
+describe('mapBoxToRegion', () => {
+  it('maps a box inside a cropped region back to the whole element', () => {
+    // Region: right half, top 80% of the element.
+    const region = { x: 0.5, y: 0, width: 0.5, height: 0.8 };
+    expectBoxCloseTo(mapBoxToRegion({ x: 0.2, y: 0.5, width: 0.4, height: 0.25 }, region), {
+      x: 0.6,
+      y: 0.4,
+      width: 0.2,
+      height: 0.2,
+    });
+  });
+
+  it('keeps boxes unchanged for a full region', () => {
+    const box = { x: 0.1, y: 0.2, width: 0.3, height: 0.4 };
+    expect(mapBoxToRegion(box, { x: 0, y: 0, width: 1, height: 1 })).toEqual(box);
   });
 });

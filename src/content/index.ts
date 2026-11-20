@@ -6,6 +6,7 @@ import {
   TRANSLATE_IMAGE,
 } from '../constants';
 import type {
+  Box,
   FileSizes,
   GetFileSizesMessage,
   Settings,
@@ -16,12 +17,14 @@ import type {
 import { evaluateRules } from '../utils';
 import { getBlobDataUrl } from '../utils/blob';
 import { getSettings, mergeSettings } from '../utils/settings';
-import { collectImages, getCanvasContentKey, type ImageCandidate } from './collectImages';
+import { mapBoxToRegion } from '../utils/translation';
+import { captureCanvasInOrder, CaptureNotReadyError, getIsCaptureReady } from './capture';
+import { collectImages, getCanvasContent, type ImageCandidate } from './collectImages';
 import { overlayRoot, scheduleReposition, updateMarks } from './marker';
 
 const SCAN_DELAY_MS = 500;
-// Readers often create canvases first and draw them later, without any event.
-const BLANK_CANVAS_RETRY_MS = 1000;
+// Readers draw canvases later without any event, and tainted canvases wait to be on screen.
+const RETRY_SCAN_MS = 1000;
 
 let settings: Settings = DEFAULT_SETTINGS;
 // Sizes from the service worker; null = lookup failed.
@@ -32,7 +35,7 @@ const translations = new Map<string, TranslationState>();
 // Bumped when translations are reset, so late responses for old settings are dropped.
 let translationGeneration = 0;
 let scanTimer: ReturnType<typeof setTimeout> | undefined;
-let blankCanvasTimer: ReturnType<typeof setTimeout> | undefined;
+let retryScanTimer: ReturnType<typeof setTimeout> | undefined;
 
 // After the extension reloads, this script keeps running in open tabs but chrome.* calls fail.
 const getIsExtensionContextValid = () => Boolean(chrome.runtime?.id);
@@ -64,21 +67,29 @@ const scan = () => {
     else if (ruleResult === 'unknown' && !pendingUrls.has(metrics.url)) unknownUrls.add(metrics.url);
   }
   const isTranslationEnabled = settings.translation.isEnabled;
-  let hasBlankCanvas = false;
+  let isRetryNeeded = false;
   if (isTranslationEnabled) {
     for (const { element, metrics } of matchedCandidates) {
+      let isTainted = false;
       if (element instanceof HTMLCanvasElement) {
-        const contentKey = getCanvasContentKey(element);
-        if (!contentKey) {
-          hasBlankCanvas = true;
+        const canvasContent = getCanvasContent(element);
+        if (!canvasContent) {
+          isRetryNeeded = true;
           continue;
         }
-        metrics.url = contentKey;
+        metrics.url = canvasContent.key;
+        isTainted = canvasContent.isTainted;
       }
-      if (!translations.has(metrics.url)) void requestTranslation(metrics.url, element);
+      if (translations.has(metrics.url)) continue;
+      // Tainted canvases are screenshotted, so they must be on screen first.
+      if (isTainted && !getIsCaptureReady(element as HTMLCanvasElement)) {
+        isRetryNeeded = true;
+        continue;
+      }
+      void requestTranslation(metrics.url, element, isTainted);
     }
   }
-  if (hasBlankCanvas) scheduleBlankCanvasRetry();
+  if (isRetryNeeded) scheduleRetryScan();
   updateMarks(
     matchedCandidates.map((candidate) => ({
       ...candidate,
@@ -130,40 +141,64 @@ const requestFileSizes = async (urls: string[]) => {
   scheduleScan();
 };
 
-const scheduleBlankCanvasRetry = () => {
-  if (blankCanvasTimer !== undefined) return;
-  blankCanvasTimer = setTimeout(() => {
-    blankCanvasTimer = undefined;
+const scheduleRetryScan = () => {
+  if (retryScanTimer !== undefined) return;
+  retryScanTimer = setTimeout(() => {
+    retryScanTimer = undefined;
     scheduleScan();
-  }, BLANK_CANVAS_RETRY_MS);
+  }, RETRY_SCAN_MS);
 };
 
-const getTranslationSource = async (url: string, element: Element): Promise<string> => {
-  // Throws on tainted canvases (cross-origin pixels drawn without CORS).
-  if (element instanceof HTMLCanvasElement) return element.toDataURL('image/jpeg', 0.92);
+// region: set when only part of a canvas was captured; boxes are relative to it.
+type TranslationSource = { source: string; region?: Box };
+
+const getTranslationSource = async (
+  url: string,
+  element: Element,
+  isTainted: boolean,
+): Promise<TranslationSource> => {
+  if (element instanceof HTMLCanvasElement) {
+    // Cross-origin pixels cannot be read, so screenshot the canvas instead.
+    if (isTainted) {
+      const { dataUrl, region } = await captureCanvasInOrder(element);
+      return { source: dataUrl, region };
+    }
+    return { source: element.toDataURL('image/jpeg', 0.92) };
+  }
   // blob: URLs only resolve inside this page, so send their bytes instead.
-  if (url.startsWith('blob:')) return getBlobDataUrl(await (await fetch(url)).blob());
-  return url;
+  if (url.startsWith('blob:')) return { source: await getBlobDataUrl(await (await fetch(url)).blob()) };
+  return { source: url };
 };
 
 // url: image URL or canvas content key.
-const requestTranslation = async (url: string, element: Element) => {
+const requestTranslation = async (url: string, element: Element, isTainted: boolean) => {
   const generation = translationGeneration;
   // Set synchronously so the same scan does not request it twice.
   translations.set(url, { status: 'pending' });
   let nextState: TranslationState;
   try {
-    const source = await getTranslationSource(url, element);
+    const { source, region } = await getTranslationSource(url, element, isTainted);
     const message: TranslateImageMessage = { type: TRANSLATE_IMAGE, source };
     const response: TranslateImageResponse = await chrome.runtime.sendMessage(message);
     nextState =
       'error' in response
         ? { status: 'error', message: response.error }
-        : { status: 'done', dialogues: response.dialogues };
+        : {
+            status: 'done',
+            dialogues: region
+              ? response.dialogues.map((dialogue) => ({ ...dialogue, box: mapBoxToRegion(dialogue.box, region) }))
+              : response.dialogues,
+          };
   } catch (error) {
     // Orphaned by an extension reload: stop quietly; the refreshed page gets a new script.
     if (!getIsExtensionContextValid()) {
       stopContentScript();
+      return;
+    }
+    // Tab went to the background or the page moved: not a failure, retry later.
+    if (error instanceof CaptureNotReadyError) {
+      if (generation === translationGeneration) translations.delete(url);
+      scheduleRetryScan();
       return;
     }
     nextState = { status: 'error', message: error instanceof Error ? error.message : String(error) };
@@ -203,8 +238,9 @@ const stopContentScript = () => {
   document.removeEventListener('scroll', scheduleReposition, { capture: true });
   document.removeEventListener('transitionend', scheduleReposition, true);
   document.removeEventListener('animationend', scheduleReposition, true);
+  document.removeEventListener('visibilitychange', scheduleScan);
   clearTimeout(scanTimer);
-  clearTimeout(blankCanvasTimer);
+  clearTimeout(retryScanTimer);
   // Stale marks would no longer follow the page.
   updateMarks([]);
   overlayRoot.remove();
@@ -242,6 +278,8 @@ const init = async () => {
   // CSS transitions end without a mutation; settle marks at the final position.
   document.addEventListener('transitionend', scheduleReposition, true);
   document.addEventListener('animationend', scheduleReposition, true);
+  // Tainted canvases can only be screenshotted while the tab is in front.
+  document.addEventListener('visibilitychange', scheduleScan);
 };
 
 void init();

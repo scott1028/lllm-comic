@@ -18,8 +18,15 @@ const getCanvasElementKey = (canvas: HTMLCanvasElement): string => {
   return `canvas:#${id}`;
 };
 
-// Translation key that changes when the canvas is redrawn; undefined while it is still blank.
-export const getCanvasContentKey = (canvas: HTMLCanvasElement): string | undefined => {
+export type CanvasContent = {
+  // Changes when the canvas is redrawn (element-based when tainted).
+  key: string;
+  // Cross-origin pixels: cannot be read, only screenshotted.
+  isTainted: boolean;
+};
+
+// undefined while the canvas is still blank.
+export const getCanvasContent = (canvas: HTMLCanvasElement): CanvasContent | undefined => {
   // New canvas per call: drawing a tainted canvas would taint a shared one for good.
   const context = new OffscreenCanvas(FINGERPRINT_SIZE, FINGERPRINT_SIZE).getContext('2d', {
     willReadFrequently: true,
@@ -30,10 +37,10 @@ export const getCanvasContentKey = (canvas: HTMLCanvasElement): string | undefin
     pixels = context.getImageData(0, 0, FINGERPRINT_SIZE, FINGERPRINT_SIZE).data;
   } catch {
     // Tainted by cross-origin pixels: cannot fingerprint, fall back to the element.
-    return getCanvasElementKey(canvas);
+    return { key: getCanvasElementKey(canvas), isTainted: true };
   }
   if (getIsUniformPixels(pixels)) return undefined;
-  return `canvas:${String.fromCharCode(...pixels)}`;
+  return { key: `canvas:${String.fromCharCode(...pixels)}`, isTainted: false };
 };
 
 // Size known without a lookup; undefined means look it up later (blob: in page, others via service worker).

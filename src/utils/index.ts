@@ -1,4 +1,4 @@
-import type { ImageMetrics, Rule, RuleResult, Settings } from '../types';
+import type { ImageMetrics, Rect, Rule, RuleResult, Settings } from '../types';
 
 export { getContentRangeTotal, getDataUrlByteSize } from './fileSize';
 
@@ -37,8 +37,6 @@ export const evaluateRules = (
   if (ruleResults.includes(true)) return true;
   return ruleResults.every((ruleResult) => ruleResult === false) ? false : 'unknown';
 };
-
-export type Rect = { left: number; top: number; right: number; bottom: number };
 
 // Overlap of all rects; undefined when they do not overlap.
 export const getIntersection = (rects: Rect[]): Rect | undefined => {

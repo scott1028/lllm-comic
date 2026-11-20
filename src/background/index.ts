@@ -1,11 +1,14 @@
-import { GET_FILE_SIZES, TRANSLATE_IMAGE } from '../constants';
+import { CAPTURE_REGION, GET_FILE_SIZES, TRANSLATE_IMAGE } from '../constants';
 import type {
+  CaptureRegionMessage,
+  CaptureRegionResponse,
   FileSizes,
   GetFileSizesMessage,
   TranslateImageMessage,
   TranslateImageResponse,
 } from '../types';
 import { getContentRangeTotal } from '../utils';
+import { captureRegion, TabNotActiveError } from './capture';
 import { translateImage } from './translate';
 
 const MAX_CONCURRENT_FETCHES = 6;
@@ -63,7 +66,7 @@ const getFileSizes = async (urls: string[]): Promise<FileSizes> => {
 };
 
 chrome.runtime.onMessage.addListener(
-  (message: GetFileSizesMessage | TranslateImageMessage, _sender, sendResponse) => {
+  (message: GetFileSizesMessage | TranslateImageMessage | CaptureRegionMessage, sender, sendResponse) => {
     if (message.type === GET_FILE_SIZES) {
       void getFileSizes(message.urls).then(sendResponse);
       // Keep the channel open for the async response.
@@ -76,6 +79,17 @@ chrome.runtime.onMessage.addListener(
           sendResponse({
             error: error instanceof Error ? error.message : String(error),
           } satisfies TranslateImageResponse),
+      );
+      return true;
+    }
+    if (message.type === CAPTURE_REGION && sender.tab) {
+      captureRegion(sender.tab, message.rect, message.viewportWidth).then(
+        (dataUrl) => sendResponse({ dataUrl } satisfies CaptureRegionResponse),
+        (error: unknown) =>
+          sendResponse({
+            error: error instanceof Error ? error.message : String(error),
+            isRetryable: error instanceof TabNotActiveError,
+          } satisfies CaptureRegionResponse),
       );
       return true;
     }

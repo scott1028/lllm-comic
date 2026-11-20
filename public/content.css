@@ -33,3 +33,12 @@ lis-badge {
   font: 600 11px/1.4 system-ui, sans-serif;
   white-space: nowrap;
 }
+
+/* Screenshot of a tainted canvas in progress: keep our marks out of it. */
+html[data-lis-capturing] [data-lis-marked] {
+  outline: none !important;
+}
+
+html[data-lis-capturing] lis-overlay {
+  display: none !important;
+}

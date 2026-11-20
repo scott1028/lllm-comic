@@ -9,6 +9,8 @@ export const GET_FILE_SIZES = 'GET_FILE_SIZES';
 
 export const TRANSLATE_IMAGE = 'TRANSLATE_IMAGE';
 
+export const CAPTURE_REGION = 'CAPTURE_REGION';
+
 export const DEFAULT_SETTINGS: Settings = {
   isEnabled: true,
   matchMode: 'any',

@@ -32,6 +32,14 @@ export const getReasoningParams = (reasoningEffort: string): Record<string, unkn
   return { reasoning_effort: effort };
 };
 
+// Boxes from a cropped region (ratios of the region) -> ratios of the whole element.
+export const mapBoxToRegion = (box: Box, region: Box): Box => ({
+  x: region.x + box.x * region.width,
+  y: region.y + box.y * region.height,
+  width: box.width * region.width,
+  height: box.height * region.height,
+});
+
 // Scale down only, keeping the aspect ratio.
 export const getResizedSize = (
   width: number,
