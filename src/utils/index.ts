@@ -26,7 +26,7 @@ const evaluateRule = (rule: Rule, metrics: ImageMetrics): RuleResult => {
 // Three-valued: 'unknown' only when the missing file size can change the outcome.
 export const evaluateRules = (
   metrics: ImageMetrics,
-  { matchMode, rules }: Settings,
+  { matchMode, rules }: Pick<Settings, 'matchMode' | 'rules'>,
 ): RuleResult => {
   if (rules.length === 0) return false;
   const ruleResults = rules.map((rule) => evaluateRule(rule, metrics));

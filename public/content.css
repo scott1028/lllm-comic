@@ -12,9 +12,18 @@ lis-overlay {
   z-index: 2147483647 !important;
 }
 
+lis-overlay > canvas {
+  all: initial;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+}
+
 lis-badge {
   all: initial;
   position: absolute;
+  z-index: 1;
   top: 0;
   left: 0;
   padding: 2px 6px;

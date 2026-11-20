@@ -21,6 +21,30 @@
     <p id="empty-hint" hidden>沒有規則時，不會標示任何圖片。</p>
     <button id="add-rule" type="button">+ 新增規則</button>
 
+    <fieldset id="translation">
+      <legend>漫畫翻譯</legend>
+      <label class="toggle"><input type="checkbox" id="is-translation-enabled" /> 啟用翻譯</label>
+      <label>目標語言 <input id="target-language" type="text" /></label>
+      <label>API URL <input id="api-base-url" type="url" placeholder="http://127.0.0.1:8888/v1" /></label>
+      <label>API key <input id="api-key" type="password" autocomplete="off" /></label>
+      <label>模型 <input id="model" type="text" list="model-options" placeholder="server 上的模型名稱" /></label>
+      <datalist id="model-options"></datalist>
+      <label
+        >思考程度
+        <input id="reasoning-effort" type="text" list="reasoning-options" placeholder="空白 = 由 server 決定"
+      /></label>
+      <datalist id="reasoning-options">
+        <option value="none" label="關閉思考 (最快)"></option>
+        <option value="minimal"></option>
+        <option value="low"></option>
+        <option value="medium"></option>
+        <option value="high"></option>
+        <option value="xhigh"></option>
+        <option value="max"></option>
+      </datalist>
+      <p id="api-status"></p>
+    </fieldset>
+
     <template id="rule-template">
       <li class="rule">
         <select name="metric" aria-label="指標">

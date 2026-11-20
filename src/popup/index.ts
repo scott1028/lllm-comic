@@ -1,6 +1,6 @@
-import { STORAGE_KEY } from '../constants';
-import type { MatchMode, Metric, Operator, Rule, Settings } from '../types';
-import { getSettings } from '../utils/settings';
+import { API_KEY_STORAGE_KEY, STORAGE_KEY } from '../constants';
+import type { MatchMode, Metric, Operator, Rule, Settings, TranslationSettings } from '../types';
+import { getApiKey, getSettings } from '../utils/settings';
 
 const SAVE_DELAY_MS = 300;
 
@@ -19,9 +19,23 @@ const rulesList = document.querySelector<HTMLUListElement>('#rules')!;
 const emptyHint = document.querySelector<HTMLParagraphElement>('#empty-hint')!;
 const addRuleButton = document.querySelector<HTMLButtonElement>('#add-rule')!;
 const ruleTemplate = document.querySelector<HTMLTemplateElement>('#rule-template')!;
+const translationEnabledCheckbox = document.querySelector<HTMLInputElement>('#is-translation-enabled')!;
+const apiBaseUrlInput = document.querySelector<HTMLInputElement>('#api-base-url')!;
+const apiKeyInput = document.querySelector<HTMLInputElement>('#api-key')!;
+const modelOptions = document.querySelector<HTMLDataListElement>('#model-options')!;
+const apiStatus = document.querySelector<HTMLParagraphElement>('#api-status')!;
+const translationTextInputs: [keyof Omit<TranslationSettings, 'isEnabled'>, HTMLInputElement][] = [
+  ['targetLanguage', document.querySelector<HTMLInputElement>('#target-language')!],
+  ['apiBaseUrl', apiBaseUrlInput],
+  ['model', document.querySelector<HTMLInputElement>('#model')!],
+  ['reasoningEffort', document.querySelector<HTMLInputElement>('#reasoning-effort')!],
+];
+// Empty input keeps the last value for these; others may be empty.
+const REQUIRED_TRANSLATION_FIELDS = new Set(['targetLanguage', 'apiBaseUrl']);
 
 let settings: Settings;
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
+let apiKeySaveTimer: ReturnType<typeof setTimeout> | undefined;
 
 // Debounced: storage.sync limits writes per minute, and typing fires many input events.
 const saveSettings = () => {
@@ -76,6 +90,56 @@ const handleRuleRemoveClick = (event: Event) => {
   saveSettings();
 };
 
+// Fills the model suggestions and shows whether the URL and key work.
+const loadModelOptions = async () => {
+  const apiKey = apiKeyInput.value.trim();
+  try {
+    const response = await fetch(`${settings.translation.apiBaseUrl.replace(/\/+$/, '')}/models`, {
+      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+    });
+    if (!response.ok) {
+      apiStatus.textContent = `無法連線：HTTP ${response.status}`;
+      return;
+    }
+    const { data } = (await response.json()) as { data?: { id: string }[] };
+    const modelIds = (data ?? []).map((model) => model.id);
+    modelOptions.replaceChildren(
+      ...modelIds.map((id) => Object.assign(document.createElement('option'), { value: id })),
+    );
+    apiStatus.textContent = `已連線：${modelIds.length} 個模型`;
+  } catch (error) {
+    apiStatus.textContent = `無法連線：${error instanceof Error ? error.message : String(error)}`;
+  }
+};
+
+const initTranslationSettings = async () => {
+  translationEnabledCheckbox.checked = settings.translation.isEnabled;
+  translationEnabledCheckbox.addEventListener('change', () => {
+    settings.translation.isEnabled = translationEnabledCheckbox.checked;
+    saveSettings();
+  });
+  for (const [field, input] of translationTextInputs) {
+    input.value = settings.translation[field];
+    input.addEventListener('input', () => {
+      const value = input.value.trim();
+      if (!value && REQUIRED_TRANSLATION_FIELDS.has(field)) return;
+      settings.translation[field] = value;
+      saveSettings();
+    });
+  }
+  apiBaseUrlInput.addEventListener('change', () => void loadModelOptions());
+
+  apiKeyInput.value = await getApiKey();
+  apiKeyInput.addEventListener('input', () => {
+    clearTimeout(apiKeySaveTimer);
+    apiKeySaveTimer = setTimeout(() => {
+      void chrome.storage.local.set({ [API_KEY_STORAGE_KEY]: apiKeyInput.value.trim() });
+    }, SAVE_DELAY_MS);
+  });
+  apiKeyInput.addEventListener('change', () => void loadModelOptions());
+  void loadModelOptions();
+};
+
 const init = async () => {
   settings = await getSettings();
   enabledCheckbox.checked = settings.isEnabled;
@@ -101,6 +165,7 @@ const init = async () => {
     renderRules();
     saveSettings();
   });
+  await initTranslationSettings();
 };
 
 void init();

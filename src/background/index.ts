@@ -1,6 +1,12 @@
-import { GET_FILE_SIZES } from '../constants';
-import type { FileSizes, GetFileSizesMessage } from '../types';
+import { GET_FILE_SIZES, TRANSLATE_IMAGE } from '../constants';
+import type {
+  FileSizes,
+  GetFileSizesMessage,
+  TranslateImageMessage,
+  TranslateImageResponse,
+} from '../types';
 import { getContentRangeTotal } from '../utils';
+import { translateImage } from './translate';
 
 const MAX_CONCURRENT_FETCHES = 6;
 
@@ -56,9 +62,22 @@ const getFileSizes = async (urls: string[]): Promise<FileSizes> => {
   return Object.fromEntries(urls.map((url, index) => [url, sizes[index]]));
 };
 
-chrome.runtime.onMessage.addListener((message: GetFileSizesMessage, _sender, sendResponse) => {
-  if (message.type !== GET_FILE_SIZES) return;
-  void getFileSizes(message.urls).then(sendResponse);
-  // Keep the channel open for the async response.
-  return true;
-});
+chrome.runtime.onMessage.addListener(
+  (message: GetFileSizesMessage | TranslateImageMessage, _sender, sendResponse) => {
+    if (message.type === GET_FILE_SIZES) {
+      void getFileSizes(message.urls).then(sendResponse);
+      // Keep the channel open for the async response.
+      return true;
+    }
+    if (message.type === TRANSLATE_IMAGE) {
+      translateImage(message.source).then(
+        (dialogues) => sendResponse({ dialogues } satisfies TranslateImageResponse),
+        (error: unknown) =>
+          sendResponse({
+            error: error instanceof Error ? error.message : String(error),
+          } satisfies TranslateImageResponse),
+      );
+      return true;
+    }
+  },
+);

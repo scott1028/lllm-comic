@@ -4,11 +4,10 @@ import { evaluateRules, getBadgeText, getOversizeRatio } from '.';
 
 const bigImage: ImageMetrics = { url: 'a.png', width: 4000, height: 3000, oversizeRatio: 5 };
 
-const getSettings = (matchMode: Settings['matchMode'], rules: Settings['rules']): Settings => ({
-  isEnabled: true,
-  matchMode,
-  rules,
-});
+const getSettings = (
+  matchMode: Settings['matchMode'],
+  rules: Settings['rules'],
+): Pick<Settings, 'matchMode' | 'rules'> => ({ matchMode, rules });
 
 describe('evaluateRules', () => {
   it('returns false when there are no rules', () => {
