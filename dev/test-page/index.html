@@ -62,7 +62,12 @@
     </section>
 
     <section>
-      <h2>9. Lazy-loaded JPG below the fold → marked after scrolling</h2>
+      <h2>9. 1000×750 JPG (863 KB) as blob: URL, like MangaDex — size read in page → marked</h2>
+      <div id="blob"></div>
+    </section>
+
+    <section>
+      <h2>10. Lazy-loaded JPG below the fold → marked after scrolling</h2>
       <div class="spacer"></div>
       <img src="images/heavy.jpg?lazy" width="300" loading="lazy" />
     </section>
@@ -74,6 +79,15 @@
         img.width = 300;
         document.getElementById('delayed').append(img);
       }, 2000);
+
+      fetch('images/heavy.jpg?blob')
+        .then((response) => response.blob())
+        .then((blob) => {
+          const img = document.createElement('img');
+          img.src = URL.createObjectURL(blob);
+          img.width = 500;
+          document.getElementById('blob').append(img);
+        });
     </script>
   </body>
 </html>

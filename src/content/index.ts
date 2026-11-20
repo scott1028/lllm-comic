@@ -42,12 +42,30 @@ const scheduleScan = () => {
   }, SCAN_DELAY_MS);
 };
 
+// blob: URLs exist only in this page, so read them here (from memory, no download).
+const getBlobFileSize = async (url: string): Promise<number | null> => {
+  try {
+    return (await (await fetch(url)).blob()).size;
+  } catch {
+    // Page already revoked the blob URL.
+    return null;
+  }
+};
+
 const requestFileSizes = async (urls: string[]) => {
   urls.forEach((url) => pendingUrls.add(url));
+  const blobUrls = urls.filter((url) => url.startsWith('blob:'));
+  const remoteUrls = urls.filter((url) => !url.startsWith('blob:'));
   try {
-    const message: GetFileSizesMessage = { type: GET_FILE_SIZES, urls };
-    const sizes: FileSizes = await chrome.runtime.sendMessage(message);
-    urls.forEach((url) => fileSizes.set(url, sizes[url] ?? null));
+    const message: GetFileSizesMessage = { type: GET_FILE_SIZES, urls: remoteUrls };
+    const [blobSizes, remoteSizes] = await Promise.all([
+      Promise.all(blobUrls.map(getBlobFileSize)),
+      remoteUrls.length > 0
+        ? (chrome.runtime.sendMessage(message) as Promise<FileSizes>)
+        : ({} as FileSizes),
+    ]);
+    blobUrls.forEach((url, index) => fileSizes.set(url, blobSizes[index]));
+    remoteUrls.forEach((url) => fileSizes.set(url, remoteSizes[url] ?? null));
   } catch {
     // Extension was reloaded; this content script is orphaned.
     return;

@@ -3,7 +3,7 @@ import { getDataUrlByteSize, getOversizeRatio } from '../utils';
 
 export type ImageCandidate = { element: Element; metrics: ImageMetrics };
 
-// Size known without a network request; undefined means ask the service worker.
+// Size known without a lookup; undefined means look it up later (blob: in page, others via service worker).
 const getKnownFileSize = (url: string): number | undefined => {
   if (url.startsWith('data:')) return getDataUrlByteSize(url);
   // Cross-origin entries report 0 unless the server sends Timing-Allow-Origin.
@@ -15,7 +15,7 @@ export const collectImages = (): ImageCandidate[] => {
   const candidates: ImageCandidate[] = [];
   for (const img of document.images) {
     const url = img.currentSrc || img.src;
-    if (!url || url.startsWith('blob:') || !img.complete || img.naturalWidth === 0) continue;
+    if (!url || !img.complete || img.naturalWidth === 0) continue;
     const rect = img.getBoundingClientRect();
     // Hidden images cannot be marked.
     if (rect.width === 0 || rect.height === 0) continue;
