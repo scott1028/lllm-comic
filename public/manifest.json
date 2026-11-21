@@ -3,7 +3,7 @@
   "name": "Large Image Spotter",
   "version": "0.1.0",
   "description": "Mark large images on the current page by file size, pixel size, or oversize ratio.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "declarativeNetRequestWithHostAccess"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js",

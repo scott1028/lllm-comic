@@ -8,6 +8,7 @@ import {
   getTranslationPrompt,
   parseDialogues,
 } from '../utils/translation';
+import { runWithReferer } from './referer';
 
 const MAX_IMAGE_EDGE = 1600;
 const REQUEST_TIMEOUT_MS = 180_000;
@@ -91,9 +92,10 @@ const requestDialogues = async (
 };
 
 // source: data: URL or http(s) URL; host permissions let us fetch it without CORS.
-export const translateImage = async (source: string): Promise<Dialogue[]> => {
+// pageUrl: page showing the image, sent as Referer.
+export const translateImage = async (source: string, pageUrl: string | undefined): Promise<Dialogue[]> => {
   const [{ translation }, apiKey] = await Promise.all([getSettings(), getApiKey()]);
-  const imageResponse = await fetch(source);
+  const imageResponse = await runWithReferer(source, pageUrl, () => fetch(source));
   if (!imageResponse.ok) throw new Error(`Image fetch failed: HTTP ${imageResponse.status}`);
   const imageBlob = await imageResponse.blob();
 

@@ -9,6 +9,7 @@ import type {
 } from '../types';
 import { getContentRangeTotal } from '../utils';
 import { captureRegion, TabNotActiveError } from './capture';
+import { runWithReferer } from './referer';
 import { RetryableApiError, translateImage } from './translate';
 
 const MAX_CONCURRENT_FETCHES = 6;
@@ -51,12 +52,12 @@ const fetchFileSize = async (url: string): Promise<number | null> => {
   }
 };
 
-const getFileSizes = async (urls: string[]): Promise<FileSizes> => {
+const getFileSizes = async (urls: string[], pageUrl: string | undefined): Promise<FileSizes> => {
   const sizes = await Promise.all(
     urls.map((url) => {
       let size = fileSizeCache.get(url);
       if (!size) {
-        size = runLimited(() => fetchFileSize(url));
+        size = runLimited(() => runWithReferer(url, pageUrl, () => fetchFileSize(url)).catch(() => null));
         fileSizeCache.set(url, size);
       }
       return size;
@@ -68,12 +69,12 @@ const getFileSizes = async (urls: string[]): Promise<FileSizes> => {
 chrome.runtime.onMessage.addListener(
   (message: GetFileSizesMessage | TranslateImageMessage | CaptureRegionMessage, sender, sendResponse) => {
     if (message.type === GET_FILE_SIZES) {
-      void getFileSizes(message.urls).then(sendResponse);
+      void getFileSizes(message.urls, sender.url).then(sendResponse);
       // Keep the channel open for the async response.
       return true;
     }
     if (message.type === TRANSLATE_IMAGE) {
-      translateImage(message.source).then(
+      translateImage(message.source, sender.url).then(
         (dialogues) => sendResponse({ dialogues } satisfies TranslateImageResponse),
         (error: unknown) =>
           sendResponse({
