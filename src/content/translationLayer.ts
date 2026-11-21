@@ -5,6 +5,8 @@ const FONT_FAMILY = '"Noto Sans CJK TC", "Noto Sans TC", "PingFang TC", "Microso
 // Bubbles are often ellipses: round the corners and keep text away from them.
 const CORNER_RADIUS_RATIO = 0.3;
 const TEXT_PADDING_RATIO = 0.1;
+// White background hugs the text (padding = font size x ratio), so loose boxes do not hide the art.
+const TEXT_BACKGROUND_PADDING_RATIO = 0.5;
 
 // Draw translated text over each dialogue box; everything else stays transparent.
 export const drawDialogues = (
@@ -35,17 +37,27 @@ export const drawDialogues = (
     const boxWidth = box.width * width;
     const boxHeight = box.height * height;
 
-    context.fillStyle = 'rgba(255, 255, 255, 0.96)';
-    context.beginPath();
-    context.roundRect(boxX, boxY, boxWidth, boxHeight, Math.min(boxWidth, boxHeight) * CORNER_RADIUS_RATIO);
-    context.fill();
-
     const layout = layoutText(
       translation,
       boxWidth * (1 - TEXT_PADDING_RATIO * 2),
       boxHeight * (1 - TEXT_PADDING_RATIO * 2),
       measureTextWidth,
     );
+
+    const backgroundPadding = layout.fontSize * TEXT_BACKGROUND_PADDING_RATIO;
+    const backgroundWidth = Math.min(boxWidth, layout.width + backgroundPadding * 2);
+    const backgroundHeight = Math.min(boxHeight, layout.lines.length * layout.lineHeight + backgroundPadding * 2);
+    context.fillStyle = 'rgba(255, 255, 255, 0.96)';
+    context.beginPath();
+    context.roundRect(
+      boxX + (boxWidth - backgroundWidth) / 2,
+      boxY + (boxHeight - backgroundHeight) / 2,
+      backgroundWidth,
+      backgroundHeight,
+      Math.min(backgroundWidth, backgroundHeight) * CORNER_RADIUS_RATIO,
+    );
+    context.fill();
+
     context.font = `bold ${layout.fontSize}px ${FONT_FAMILY}`;
     context.fillStyle = '#111';
     const firstLineY = boxY + boxHeight / 2 - ((layout.lines.length - 1) * layout.lineHeight) / 2;

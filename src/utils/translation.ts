@@ -14,7 +14,8 @@ const NO_LINE_START_PATTERN = /^[、。，．,.！？!?）」』〉》】…ー~
 
 export type MeasureTextWidth = (text: string, fontSize: number) => number;
 
-export type TextLayout = { fontSize: number; lineHeight: number; lines: string[] };
+// width: widest line.
+export type TextLayout = { fontSize: number; lineHeight: number; lines: string[]; width: number };
 
 export const getTranslationPrompt = (targetLanguage: string): string =>
   'You are a manga translator. Find every speech bubble, thought bubble and narration box in the image. ' +
@@ -143,14 +144,15 @@ export const layoutText = (
   for (let fontSize = startFontSize; fontSize > MIN_FONT_SIZE; fontSize--) {
     const lines = wrapText(text, boxWidth, fontSize, measureTextWidth);
     const lineHeight = fontSize * LINE_HEIGHT_RATIO;
-    const isFit =
-      lines.length * lineHeight <= boxHeight &&
-      lines.every((line) => measureTextWidth(line, fontSize) <= boxWidth);
-    if (isFit) return { fontSize, lineHeight, lines };
+    const width = Math.max(...lines.map((line) => measureTextWidth(line, fontSize)));
+    const isFit = lines.length * lineHeight <= boxHeight && width <= boxWidth;
+    if (isFit) return { fontSize, lineHeight, lines, width };
   }
+  const lines = wrapText(text, boxWidth, MIN_FONT_SIZE, measureTextWidth);
   return {
     fontSize: MIN_FONT_SIZE,
     lineHeight: MIN_FONT_SIZE * LINE_HEIGHT_RATIO,
-    lines: wrapText(text, boxWidth, MIN_FONT_SIZE, measureTextWidth),
+    lines,
+    width: Math.max(...lines.map((line) => measureTextWidth(line, MIN_FONT_SIZE))),
   };
 };
