@@ -13,10 +13,11 @@ export const CAPTURE_REGION = 'CAPTURE_REGION';
 
 export const DEFAULT_SETTINGS: Settings = {
   isEnabled: true,
-  matchMode: 'any',
+  matchMode: 'all',
   rules: [
-    { metric: 'fileSizeKB', operator: '>=', value: 500 },
-    { metric: 'width', operator: '>=', value: 2000 },
+    { metric: 'fileSizeKB', operator: '>=', value: 200 },
+    { metric: 'width', operator: '>=', value: 800 },
+    { metric: 'height', operator: '>=', value: 600 },
   ],
   translation: {
     isEnabled: false,

@@ -8,7 +8,7 @@ describe('mergeSettings', () => {
     const settings = mergeSettings(undefined);
     expect(settings).toEqual(DEFAULT_SETTINGS);
     settings.rules.push({ metric: 'width', operator: '>=', value: 1 });
-    expect(DEFAULT_SETTINGS.rules).toHaveLength(2);
+    expect(DEFAULT_SETTINGS.rules).toHaveLength(3);
   });
 
   it('adds translation defaults to settings saved before translation existed', () => {
