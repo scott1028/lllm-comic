@@ -3,7 +3,8 @@ import type { Box, Dialogue } from '../types';
 const RETRY_BASE_DELAY_MS = 5_000;
 const RETRY_MAX_DELAY_MS = 60_000;
 
-const MIN_FONT_SIZE = 8;
+// Readability floor: small boxes overflow instead of shrinking below this.
+const MIN_FONT_SIZE = 18;
 const MAX_FONT_SIZE = 28;
 const LINE_HEIGHT_RATIO = 1.2;
 
@@ -131,6 +132,34 @@ const wrapText = (
     lines.push(line.trimEnd());
   }
   return lines;
+};
+
+// Rectangle in canvas pixels.
+export type PixelRect = { x: number; y: number; width: number; height: number };
+
+// Closer than `gap` on both axes counts as overlapping.
+const getIsOverlapping = (a: PixelRect, b: PixelRect, gap: number): boolean =>
+  a.x < b.x + b.width + gap &&
+  b.x < a.x + a.width + gap &&
+  a.y < b.y + b.height + gap &&
+  b.y < a.y + a.height + gap;
+
+// Top rect first, push each overlapping rect down below the one it hits. Output keeps input order.
+export const separateRects = (rects: PixelRect[], gap: number): PixelRect[] => {
+  const separatedRects = [...rects];
+  const placedRects: PixelRect[] = [];
+  const topFirstIndexes = rects.map((_, index) => index).sort((a, b) => rects[a].y - rects[b].y);
+  for (const index of topFirstIndexes) {
+    let rect = rects[index];
+    let blockingRect = placedRects.find((placed) => getIsOverlapping(rect, placed, gap));
+    while (blockingRect) {
+      rect = { ...rect, y: blockingRect.y + blockingRect.height + gap };
+      blockingRect = placedRects.find((placed) => getIsOverlapping(rect, placed, gap));
+    }
+    placedRects.push(rect);
+    separatedRects[index] = rect;
+  }
+  return separatedRects;
 };
 
 // Largest font size whose wrapped lines fit the box; overflows at MIN_FONT_SIZE.

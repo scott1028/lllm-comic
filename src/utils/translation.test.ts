@@ -109,8 +109,8 @@ describe('layoutText', () => {
 
   it('uses the largest font size that fits, capped at 28', () => {
     expect(layoutText('你好', 1000, 1000, measureTextWidth).fontSize).toBe(28);
-    // 4 chars in a 40x24 box: 2 lines of 2 chars at 10px fit (height 24).
-    expect(layoutText('今天天氣', 20, 24, measureTextWidth).fontSize).toBe(10);
+    // 4 chars in a 40x48 box: 2 lines of 2 chars at 20px fit (height 48).
+    expect(layoutText('今天天氣', 40, 48, measureTextWidth).fontSize).toBe(20);
   });
 
   it('does not start a line with closing punctuation', () => {
@@ -119,7 +119,7 @@ describe('layoutText', () => {
   });
 
   it('falls back to the minimum font size when nothing fits', () => {
-    expect(layoutText('這段文字太長了放不下', 10, 10, measureTextWidth).fontSize).toBe(8);
+    expect(layoutText('這段文字太長了放不下', 10, 10, measureTextWidth).fontSize).toBe(18);
   });
 });
 
