@@ -13,6 +13,8 @@ export type TranslationSettings = {
   model: string;
   // Sent as reasoning_effort; '' = let the server decide.
   reasoningEffort: string;
+  // Translation layer text floor in px; small boxes overflow instead of shrinking below it.
+  minFontSize: number;
 };
 
 export type Settings = {

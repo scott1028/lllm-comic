@@ -93,33 +93,33 @@ describe('parseDialogues', () => {
 
 describe('layoutText', () => {
   it('wraps CJK text per character', () => {
-    const layout = layoutText('今天天氣真好', 30, 200, measureTextWidth);
+    const layout = layoutText('今天天氣真好', 30, 200, measureTextWidth, 18);
     expect(layout.lines.join('')).toBe('今天天氣真好');
     expect(layout.lines.every((line) => line.length * layout.fontSize <= 30)).toBe(true);
   });
 
   it('keeps explicit line breaks', () => {
-    expect(layoutText('你好！\n天氣真好', 200, 200, measureTextWidth).lines).toEqual(['你好！', '天氣真好']);
+    expect(layoutText('你好！\n天氣真好', 200, 200, measureTextWidth, 18).lines).toEqual(['你好！', '天氣真好']);
   });
 
   it('wraps Latin text by words', () => {
-    const layout = layoutText('hello big world', 60, 100, measureTextWidth);
+    const layout = layoutText('hello big world', 60, 100, measureTextWidth, 18);
     expect(layout.lines).toEqual(['hello', 'big', 'world']);
   });
 
   it('uses the largest font size that fits, capped at 28', () => {
-    expect(layoutText('你好', 1000, 1000, measureTextWidth).fontSize).toBe(28);
+    expect(layoutText('你好', 1000, 1000, measureTextWidth, 18).fontSize).toBe(28);
     // 4 chars in a 40x48 box: 2 lines of 2 chars at 20px fit (height 48).
-    expect(layoutText('今天天氣', 40, 48, measureTextWidth).fontSize).toBe(20);
+    expect(layoutText('今天天氣', 40, 48, measureTextWidth, 18).fontSize).toBe(20);
   });
 
   it('does not start a line with closing punctuation', () => {
-    const layout = layoutText('等等！', 20, 1000, measureTextWidth);
+    const layout = layoutText('等等！', 20, 1000, measureTextWidth, 18);
     expect(layout.lines.some((line) => line.startsWith('！'))).toBe(false);
   });
 
   it('falls back to the minimum font size when nothing fits', () => {
-    expect(layoutText('這段文字太長了放不下', 10, 10, measureTextWidth).fontSize).toBe(18);
+    expect(layoutText('這段文字太長了放不下', 10, 10, measureTextWidth, 18).fontSize).toBe(18);
   });
 });
 

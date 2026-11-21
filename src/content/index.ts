@@ -16,11 +16,11 @@ import type {
 } from '../types';
 import { evaluateRules } from '../utils';
 import { getBlobDataUrl } from '../utils/blob';
-import { getSettings, mergeSettings } from '../utils/settings';
+import { getIsTranslationRequestChanged, getSettings, mergeSettings } from '../utils/settings';
 import { getRetryDelay, mapBoxToRegion } from '../utils/translation';
 import { captureCanvasInOrder, CaptureNotReadyError, getIsCaptureReady } from './capture';
 import { collectImages, getCanvasContent, type ImageCandidate } from './collectImages';
-import { overlayRoot, scheduleReposition, updateMarks } from './marker';
+import { overlayRoot, scheduleReposition, setMinFontSize, updateMarks } from './marker';
 
 const SCAN_DELAY_MS = 500;
 // Readers draw canvases later without any event, and tainted canvases wait to be on screen.
@@ -290,6 +290,7 @@ const stopContentScript = () => {
 
 const init = async () => {
   settings = await getSettings();
+  setMinFontSize(settings.translation.minFontSize);
   scan();
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
@@ -301,10 +302,11 @@ const init = async () => {
     }
     if (areaName !== 'sync' || !changes[STORAGE_KEY]) return;
     const nextSettings = mergeSettings(changes[STORAGE_KEY].newValue as Partial<Settings> | undefined);
-    if (JSON.stringify(nextSettings.translation) !== JSON.stringify(settings.translation)) {
+    if (getIsTranslationRequestChanged(settings.translation, nextSettings.translation)) {
       resetTranslations();
     }
     settings = nextSettings;
+    setMinFontSize(settings.translation.minFontSize);
     scan();
   });
   mutationObserver.observe(document.documentElement, {

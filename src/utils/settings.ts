@@ -1,5 +1,5 @@
 import { API_KEY_STORAGE_KEY, DEFAULT_SETTINGS, STORAGE_KEY } from '../constants';
-import type { Settings } from '../types';
+import type { Settings, TranslationSettings } from '../types';
 
 // Fill fields missing from settings saved by older versions.
 export const mergeSettings = (stored: Partial<Settings> | undefined): Settings => {
@@ -22,3 +22,12 @@ export const getApiKey = async (): Promise<string> => {
   const stored = await chrome.storage.local.get(API_KEY_STORAGE_KEY);
   return (stored[API_KEY_STORAGE_KEY] as string | undefined) ?? '';
 };
+
+// Font size only changes drawing, so it must not trigger new API requests.
+const getRequestKey = ({ minFontSize: _minFontSize, ...requestFields }: TranslationSettings): string =>
+  JSON.stringify(requestFields);
+
+export const getIsTranslationRequestChanged = (
+  previous: TranslationSettings,
+  next: TranslationSettings,
+): boolean => getRequestKey(previous) !== getRequestKey(next);

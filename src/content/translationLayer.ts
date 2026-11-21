@@ -18,6 +18,7 @@ export const drawDialogues = (
   dialogues: Dialogue[],
   width: number,
   height: number,
+  minFontSize: number,
 ) => {
   const pixelRatio = window.devicePixelRatio;
   canvas.width = Math.round(width * pixelRatio);
@@ -43,6 +44,7 @@ export const drawDialogues = (
       boxWidth * (1 - TEXT_PADDING_RATIO * 2),
       boxHeight * (1 - TEXT_PADDING_RATIO * 2),
       measureTextWidth,
+      minFontSize,
     );
     const backgroundPadding = layout.fontSize * TEXT_BACKGROUND_PADDING_RATIO;
     const backgroundWidth = layout.width + backgroundPadding * 2;

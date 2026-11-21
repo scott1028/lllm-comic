@@ -24,7 +24,8 @@ const apiBaseUrlInput = document.querySelector<HTMLInputElement>('#api-base-url'
 const apiKeyInput = document.querySelector<HTMLInputElement>('#api-key')!;
 const modelOptions = document.querySelector<HTMLDataListElement>('#model-options')!;
 const apiStatus = document.querySelector<HTMLParagraphElement>('#api-status')!;
-const translationTextInputs: [keyof Omit<TranslationSettings, 'isEnabled'>, HTMLInputElement][] = [
+const minFontSizeSelect = document.querySelector<HTMLSelectElement>('#min-font-size')!;
+const translationTextInputs: [keyof Omit<TranslationSettings, 'isEnabled' | 'minFontSize'>, HTMLInputElement][] = [
   ['targetLanguage', document.querySelector<HTMLInputElement>('#target-language')!],
   ['apiBaseUrl', apiBaseUrlInput],
   ['model', document.querySelector<HTMLInputElement>('#model')!],
@@ -128,6 +129,22 @@ const initTranslationSettings = async () => {
     });
   }
   apiBaseUrlInput.addEventListener('change', () => void loadModelOptions());
+
+  minFontSizeSelect.value = String(settings.translation.minFontSize);
+  minFontSizeSelect.addEventListener('change', () => {
+    settings.translation.minFontSize = Number(minFontSizeSelect.value);
+    saveSettings();
+  });
+
+  // Cleared input is saved like a manual delete, and its datalist lists every option again.
+  document.querySelectorAll<HTMLButtonElement>('.clear').forEach((button) => {
+    const input = button.closest('.clearable')!.querySelector('input')!;
+    button.addEventListener('click', () => {
+      input.value = '';
+      input.dispatchEvent(new Event('input'));
+      input.focus();
+    });
+  });
 
   apiKeyInput.value = await getApiKey();
   apiKeyInput.addEventListener('input', () => {

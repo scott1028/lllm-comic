@@ -72,7 +72,8 @@ legend {
   color: var(--muted);
 }
 
-.remove {
+.remove,
+.clear {
   padding: 0;
   border: none;
   background: none;
@@ -80,7 +81,8 @@ legend {
   cursor: pointer;
 }
 
-.remove:hover {
+.remove:hover,
+.clear:hover {
   color: var(--accent);
 }
 
@@ -115,6 +117,18 @@ input[type='radio'] {
 #translation input[type='url'],
 #translation input[type='password'] {
   min-width: 0;
+}
+
+/* Input (with its datalist arrow) + clear button. */
+.clearable {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.clearable input {
+  flex: 1;
 }
 
 #api-status {

@@ -1,3 +1,4 @@
+import { DEFAULT_SETTINGS } from '../constants';
 import type { Dialogue, Rect, TranslationState } from '../types';
 import { getBadgeText, getIntersection } from '../utils';
 import type { ImageCandidate } from './collectImages';
@@ -13,7 +14,7 @@ type MarkView = {
   clippingAncestors: Element[];
   canvas?: HTMLCanvasElement;
   dialogues?: Dialogue[];
-  // Size the canvas was last drawn at; redraw when it changes.
+  // Size and font floor the canvas was last drawn with; redraw when it changes.
   drawnSizeKey?: string;
 };
 
@@ -22,6 +23,7 @@ export const overlayRoot = document.createElement('lis-overlay');
 
 const views = new Map<Element, MarkView>();
 let isRepositionScheduled = false;
+let minFontSize = DEFAULT_SETTINGS.translation.minFontSize;
 
 const getStatusText = (translation: TranslationState | undefined): string => {
   if (!translation) return '';
@@ -74,12 +76,18 @@ const positionMarks = () => {
     view.canvas.style.clipPath = `inset(${visibleRect.top - rect.top}px ${rect.right - visibleRect.right}px ${
       rect.bottom - visibleRect.bottom
     }px ${visibleRect.left - rect.left}px)`;
-    const sizeKey = `${rect.width}x${rect.height}@${window.devicePixelRatio}`;
+    const sizeKey = `${rect.width}x${rect.height}@${window.devicePixelRatio}:${minFontSize}`;
     if (view.drawnSizeKey !== sizeKey) {
-      drawDialogues(view.canvas, view.dialogues, rect.width, rect.height);
+      drawDialogues(view.canvas, view.dialogues, rect.width, rect.height, minFontSize);
       view.drawnSizeKey = sizeKey;
     }
   }
+};
+
+// Redraws translation layers without asking the API again.
+export const setMinFontSize = (size: number) => {
+  minFontSize = size;
+  scheduleReposition();
 };
 
 export const scheduleReposition = () => {

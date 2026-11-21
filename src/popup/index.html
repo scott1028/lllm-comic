@@ -25,14 +25,41 @@
       <legend>漫畫翻譯</legend>
       <label class="toggle"><input type="checkbox" id="is-translation-enabled" /> 啟用翻譯</label>
       <label>目標語言 <input id="target-language" type="text" /></label>
+      <label>
+        文字大小
+        <select id="min-font-size" title="譯文最小字級；框夠大時會自動放大">
+          <option value="12">12 px</option>
+          <option value="14">14 px</option>
+          <option value="16">16 px</option>
+          <option value="18">18 px</option>
+          <option value="20">20 px</option>
+          <option value="22">22 px</option>
+          <option value="24">24 px</option>
+          <option value="26">26 px</option>
+          <option value="28">28 px</option>
+          <option value="30">30 px</option>
+          <option value="32">32 px</option>
+          <option value="34">34 px</option>
+          <option value="36">36 px</option>
+        </select>
+      </label>
       <label>API URL <input id="api-base-url" type="url" placeholder="http://127.0.0.1:8888/v1" /></label>
       <label>API key <input id="api-key" type="password" autocomplete="off" /></label>
-      <label>模型 <input id="model" type="text" list="model-options" placeholder="server 上的模型名稱" /></label>
+      <label>
+        模型
+        <span class="clearable">
+          <input id="model" type="text" list="model-options" placeholder="server 上的模型名稱" />
+          <button type="button" class="clear" aria-label="清除模型">✕</button>
+        </span>
+      </label>
       <datalist id="model-options"></datalist>
-      <label
-        >思考程度
-        <input id="reasoning-effort" type="text" list="reasoning-options" placeholder="空白 = 由 server 決定"
-      /></label>
+      <label>
+        思考程度
+        <span class="clearable">
+          <input id="reasoning-effort" type="text" list="reasoning-options" placeholder="空白 = 由 server 決定" />
+          <button type="button" class="clear" aria-label="清除思考程度">✕</button>
+        </span>
+      </label>
       <datalist id="reasoning-options">
         <option value="none" label="關閉思考 (最快)"></option>
         <option value="minimal"></option>

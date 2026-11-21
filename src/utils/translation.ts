@@ -3,8 +3,6 @@ import type { Box, Dialogue } from '../types';
 const RETRY_BASE_DELAY_MS = 5_000;
 const RETRY_MAX_DELAY_MS = 60_000;
 
-// Readability floor: small boxes overflow instead of shrinking below this.
-const MIN_FONT_SIZE = 18;
 const MAX_FONT_SIZE = 28;
 const LINE_HEIGHT_RATIO = 1.2;
 
@@ -162,26 +160,28 @@ export const separateRects = (rects: PixelRect[], gap: number): PixelRect[] => {
   return separatedRects;
 };
 
-// Largest font size whose wrapped lines fit the box; overflows at MIN_FONT_SIZE.
+// Largest font size whose wrapped lines fit the box; overflows at minFontSize.
+// A minFontSize above MAX_FONT_SIZE is used as a fixed size.
 export const layoutText = (
   text: string,
   boxWidth: number,
   boxHeight: number,
   measureTextWidth: MeasureTextWidth,
+  minFontSize: number,
 ): TextLayout => {
   const startFontSize = Math.min(MAX_FONT_SIZE, Math.floor(boxHeight / LINE_HEIGHT_RATIO));
-  for (let fontSize = startFontSize; fontSize > MIN_FONT_SIZE; fontSize--) {
+  for (let fontSize = startFontSize; fontSize > minFontSize; fontSize--) {
     const lines = wrapText(text, boxWidth, fontSize, measureTextWidth);
     const lineHeight = fontSize * LINE_HEIGHT_RATIO;
     const width = Math.max(...lines.map((line) => measureTextWidth(line, fontSize)));
     const isFit = lines.length * lineHeight <= boxHeight && width <= boxWidth;
     if (isFit) return { fontSize, lineHeight, lines, width };
   }
-  const lines = wrapText(text, boxWidth, MIN_FONT_SIZE, measureTextWidth);
+  const lines = wrapText(text, boxWidth, minFontSize, measureTextWidth);
   return {
-    fontSize: MIN_FONT_SIZE,
-    lineHeight: MIN_FONT_SIZE * LINE_HEIGHT_RATIO,
+    fontSize: minFontSize,
+    lineHeight: minFontSize * LINE_HEIGHT_RATIO,
     lines,
-    width: Math.max(...lines.map((line) => measureTextWidth(line, MIN_FONT_SIZE))),
+    width: Math.max(...lines.map((line) => measureTextWidth(line, minFontSize))),
   };
 };

@@ -24,5 +24,6 @@ export const DEFAULT_SETTINGS: Settings = {
     apiBaseUrl: 'http://127.0.0.1:8888/v1',
     model: '',
     reasoningEffort: 'none',
+    minFontSize: 18,
   },
 };
