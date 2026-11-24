@@ -20,7 +20,14 @@ import { getIsTranslationRequestChanged, getSettings, mergeSettings } from '../u
 import { getRetryDelay, mapBoxToRegion } from '../utils/translation';
 import { captureCanvasInOrder, CaptureNotReadyError, getIsCaptureReady } from './capture';
 import { collectImages, getCanvasContent, type ImageCandidate } from './collectImages';
-import { overlayRoot, scheduleReposition, setMinFontSize, updateMarks } from './marker';
+import {
+  getClippingAncestors,
+  getVisibleRect,
+  overlayRoot,
+  scheduleReposition,
+  setMinFontSize,
+  updateMarks,
+} from './marker';
 
 const SCAN_DELAY_MS = 500;
 // Readers draw canvases later without any event, and tainted canvases wait to be on screen.
@@ -85,6 +92,7 @@ const scan = () => {
   const isTranslationEnabled = settings.translation.isEnabled;
   let isRetryNeeded = false;
   if (isTranslationEnabled) {
+    const onScreenUrls = new Set<string>();
     for (const { element, metrics } of matchedCandidates) {
       let isTainted = false;
       if (element instanceof HTMLCanvasElement) {
@@ -96,6 +104,9 @@ const scan = () => {
         metrics.url = canvasContent.key;
         isTainted = canvasContent.isTainted;
       }
+      // Entirely off screen: requested once scrolled into view.
+      if (!getVisibleRect(element.getBoundingClientRect(), getClippingAncestors(element))) continue;
+      onScreenUrls.add(metrics.url);
       if (translations.has(metrics.url)) continue;
       // Tainted canvases are screenshotted, so they must be on screen first.
       if (isTainted && !getIsCaptureReady(element as HTMLCanvasElement)) {
@@ -104,8 +115,8 @@ const scan = () => {
       }
       void requestTranslation(metrics.url, element, isTainted);
     }
-    // Image is gone: removed, src changed or hidden.
-    cancelTranslationRequestsExcept(new Set(matchedCandidates.map(({ metrics }) => metrics.url)));
+    // Image is gone or off screen: removed, src changed, hidden or scrolled away.
+    cancelTranslationRequestsExcept(onScreenUrls);
   }
   if (isRetryNeeded) scheduleRetryScan();
   updateMarks(
@@ -329,6 +340,9 @@ const stopContentScript = () => {
   document.removeEventListener('scroll', scheduleReposition, { capture: true });
   document.removeEventListener('transitionend', scheduleReposition, true);
   document.removeEventListener('animationend', scheduleReposition, true);
+  document.removeEventListener('scroll', scheduleScan, { capture: true });
+  document.removeEventListener('transitionend', scheduleScan, true);
+  document.removeEventListener('animationend', scheduleScan, true);
   document.removeEventListener('visibilitychange', scheduleScan);
   clearTimeout(scanTimer);
   clearTimeout(retryScanTimer);
@@ -372,6 +386,10 @@ const init = async () => {
   // CSS transitions end without a mutation; settle marks at the final position.
   document.addEventListener('transitionend', scheduleReposition, true);
   document.addEventListener('animationend', scheduleReposition, true);
+  // Scrolls and page flips move images on or off screen, which starts or cancels requests.
+  document.addEventListener('scroll', scheduleScan, { capture: true, passive: true });
+  document.addEventListener('transitionend', scheduleScan, true);
+  document.addEventListener('animationend', scheduleScan, true);
   // Tainted canvases can only be screenshotted while the tab is in front.
   document.addEventListener('visibilitychange', scheduleScan);
 };
