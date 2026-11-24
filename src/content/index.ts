@@ -32,6 +32,8 @@ const fileSizes = new Map<string, number | null>();
 const pendingUrls = new Set<string>();
 // Keyed by image URL.
 const translations = new Map<string, TranslationState>();
+// Requests still running, by the same key; abort one to cancel it in the service worker.
+const translationRequests = new Map<string, AbortController>();
 // Bumped when translations are reset, so late responses for old settings are dropped.
 let translationGeneration = 0;
 // Failed attempts so far per URL, for retry backoff.
@@ -43,12 +45,23 @@ let retryScanTimer: ReturnType<typeof setTimeout> | undefined;
 // After the extension reloads, this script keeps running in open tabs but chrome.* calls fail.
 const getIsExtensionContextValid = () => Boolean(chrome.runtime?.id);
 
+// Stop the server working on images no longer shown; they are requested again if they come back.
+const cancelTranslationRequestsExcept = (keptUrls: Set<string>) => {
+  for (const [url, controller] of translationRequests) {
+    if (keptUrls.has(url)) continue;
+    controller.abort();
+    translationRequests.delete(url);
+    translations.delete(url);
+  }
+};
+
 const scan = () => {
   if (!getIsExtensionContextValid()) {
     stopContentScript();
     return;
   }
   if (!settings.isEnabled) {
+    cancelTranslationRequestsExcept(new Set());
     updateMarks([]);
     return;
   }
@@ -91,6 +104,8 @@ const scan = () => {
       }
       void requestTranslation(metrics.url, element, isTainted);
     }
+    // Image is gone: removed, src changed or hidden.
+    cancelTranslationRequestsExcept(new Set(matchedCandidates.map(({ metrics }) => metrics.url)));
   }
   if (isRetryNeeded) scheduleRetryScan();
   updateMarks(
@@ -192,20 +207,47 @@ const getTranslationSource = async (
   return { source: url };
 };
 
+// One port per request: disconnecting it cancels the request in the service worker.
+const sendTranslateMessage = (message: TranslateImageMessage, signal: AbortSignal) =>
+  new Promise<TranslateImageResponse>((resolve, reject) => {
+    // Cancelled while the source was being prepared.
+    signal.throwIfAborted();
+    const port = chrome.runtime.connect({ name: TRANSLATE_IMAGE });
+    port.onMessage.addListener((response: TranslateImageResponse) => {
+      port.disconnect();
+      resolve(response);
+    });
+    // Only fires when the service worker side closes, e.g. it was restarted.
+    port.onDisconnect.addListener(() =>
+      reject(new Error(chrome.runtime.lastError?.message ?? 'Service worker disconnected')),
+    );
+    signal.addEventListener(
+      'abort',
+      () => {
+        port.disconnect();
+        reject(signal.reason);
+      },
+      { once: true },
+    );
+    port.postMessage(message);
+  });
+
 // url: image URL or canvas content key.
 const requestTranslation = async (url: string, element: Element, isTainted: boolean) => {
   const generation = translationGeneration;
   // Set synchronously so the same scan does not request it twice.
   translations.set(url, { status: 'pending' });
+  const controller = new AbortController();
+  translationRequests.set(url, controller);
   let nextState: TranslationState;
   try {
     const { source, region } = await getTranslationSource(url, element, isTainted);
     const message: TranslateImageMessage = { type: TRANSLATE_IMAGE, source };
     let response: TranslateImageResponse;
     try {
-      response = await chrome.runtime.sendMessage(message);
+      response = await sendTranslateMessage(message, controller.signal);
     } catch (error) {
-      if (!getIsExtensionContextValid()) throw error;
+      if (!getIsExtensionContextValid() || controller.signal.aborted) throw error;
       // Service worker went away mid-request (e.g. restarted): try again later.
       response = { error: error instanceof Error ? error.message : String(error), isRetryable: true };
     }
@@ -224,6 +266,8 @@ const requestTranslation = async (url: string, element: Element, isTainted: bool
       stopContentScript();
       return;
     }
+    // Cancelled by scan or reset, which already cleared its state.
+    if (controller.signal.aborted) return;
     // Tab went to the background or the page moved: not a failure, retry later.
     if (error instanceof CaptureNotReadyError) {
       if (generation === translationGeneration) translations.delete(url);
@@ -235,6 +279,9 @@ const requestTranslation = async (url: string, element: Element, isTainted: bool
       message: error instanceof Error ? error.message : String(error),
       willRetry: false,
     };
+  } finally {
+    // A newer request for the same key may have taken this slot.
+    if (translationRequests.get(url) === controller) translationRequests.delete(url);
   }
   if (generation !== translationGeneration) return;
   if (nextState.status === 'error') {
@@ -250,6 +297,9 @@ const requestTranslation = async (url: string, element: Element, isTainted: bool
 };
 
 const resetTranslations = () => {
+  // Their results would be dropped anyway, so stop the server working on them.
+  translationRequests.forEach((controller) => controller.abort());
+  translationRequests.clear();
   translations.clear();
   clearTranslationRetries();
   translationGeneration++;

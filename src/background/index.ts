@@ -66,22 +66,33 @@ const getFileSizes = async (urls: string[], pageUrl: string | undefined): Promis
   return Object.fromEntries(urls.map((url, index) => [url, sizes[index]]));
 };
 
+// One port per translation, so the content script can cancel it.
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== TRANSLATE_IMAGE) return;
+  const controller = new AbortController();
+  // Content script cancelled, or its page closed or navigated away.
+  port.onDisconnect.addListener(() => controller.abort());
+  port.onMessage.addListener((message: TranslateImageMessage) => {
+    void translateImage(message.source, port.sender?.url, controller.signal)
+      .then(
+        (dialogues): TranslateImageResponse => ({ dialogues }),
+        (error: unknown): TranslateImageResponse => ({
+          error: error instanceof Error ? error.message : String(error),
+          isRetryable: error instanceof RetryableApiError,
+        }),
+      )
+      .then((response) => {
+        // Posting to a closed port throws.
+        if (!controller.signal.aborted) port.postMessage(response);
+      });
+  });
+});
+
 chrome.runtime.onMessage.addListener(
-  (message: GetFileSizesMessage | TranslateImageMessage | CaptureRegionMessage, sender, sendResponse) => {
+  (message: GetFileSizesMessage | CaptureRegionMessage, sender, sendResponse) => {
     if (message.type === GET_FILE_SIZES) {
       void getFileSizes(message.urls, sender.url).then(sendResponse);
       // Keep the channel open for the async response.
-      return true;
-    }
-    if (message.type === TRANSLATE_IMAGE) {
-      translateImage(message.source, sender.url).then(
-        (dialogues) => sendResponse({ dialogues } satisfies TranslateImageResponse),
-        (error: unknown) =>
-          sendResponse({
-            error: error instanceof Error ? error.message : String(error),
-            isRetryable: error instanceof RetryableApiError,
-          } satisfies TranslateImageResponse),
-      );
       return true;
     }
     if (message.type === CAPTURE_REGION && sender.tab) {

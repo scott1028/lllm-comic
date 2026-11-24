@@ -34,6 +34,9 @@ const getSha256Hex = async (bytes: ArrayBuffer): Promise<string> => {
   return [...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 };
 
+const getCachedDialogues = async (cacheKey: string): Promise<Dialogue[] | undefined> =>
+  (await chrome.storage.local.get(cacheKey))[cacheKey] as Dialogue[] | undefined;
+
 // Box ratios do not depend on the size we send, so shrink big pages to save time.
 const encodeImage = async (blob: Blob): Promise<EncodedImage> => {
   const bitmap = await createImageBitmap(blob);
@@ -49,6 +52,7 @@ const requestDialogues = async (
   image: EncodedImage,
   translation: TranslationSettings,
   apiKey: string,
+  signal: AbortSignal,
 ): Promise<Dialogue[]> => {
   const requestUrl = `${translation.apiBaseUrl.replace(/\/+$/, '')}/chat/completions`;
   const request: RequestInit = {
@@ -72,7 +76,8 @@ const requestDialogues = async (
         },
       ],
     }),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    // Aborting closes the connection, so the server can stop generating.
+    signal: AbortSignal.any([AbortSignal.timeout(REQUEST_TIMEOUT_MS), signal]),
   };
   let response: Response;
   try {
@@ -93,7 +98,12 @@ const requestDialogues = async (
 
 // source: data: URL or http(s) URL; host permissions let us fetch it without CORS.
 // pageUrl: page showing the image, sent as Referer.
-export const translateImage = async (source: string, pageUrl: string | undefined): Promise<Dialogue[]> => {
+// signal: aborted when the content script cancels (image left the page, tab closed).
+export const translateImage = async (
+  source: string,
+  pageUrl: string | undefined,
+  signal: AbortSignal,
+): Promise<Dialogue[]> => {
   const [{ translation }, apiKey] = await Promise.all([getSettings(), getApiKey()]);
   const imageResponse = await runWithReferer(source, pageUrl, () => fetch(source));
   if (!imageResponse.ok) throw new Error(`Image fetch failed: HTTP ${imageResponse.status}`);
@@ -107,12 +117,18 @@ export const translateImage = async (source: string, pageUrl: string | undefined
     translation.targetLanguage,
     translation.reasoningEffort,
   ].join(':');
-  const cached = (await chrome.storage.local.get(cacheKey))[cacheKey] as Dialogue[] | undefined;
-  if (cached) return cached;
+  const cachedDialogues = await getCachedDialogues(cacheKey);
+  if (cachedDialogues) return cachedDialogues;
 
-  const dialogues = await enqueue(async () =>
-    requestDialogues(await encodeImage(imageBlob), translation, apiKey),
-  );
-  await chrome.storage.local.set({ [cacheKey]: dialogues });
-  return dialogues;
+  return enqueue(async () => {
+    // Cancelled while waiting: skip without calling the server.
+    signal.throwIfAborted();
+    // The same image may have been translated while this one waited.
+    const latestCachedDialogues = await getCachedDialogues(cacheKey);
+    if (latestCachedDialogues) return latestCachedDialogues;
+    const dialogues = await requestDialogues(await encodeImage(imageBlob), translation, apiKey, signal);
+    // Saved inside the queue so the next waiting duplicate finds it.
+    await chrome.storage.local.set({ [cacheKey]: dialogues });
+    return dialogues;
+  });
 };
