@@ -10,6 +10,7 @@ const realFetch = globalThis.fetch;
 
 let apiSignals: (AbortSignal | null | undefined)[];
 let cacheReads: number;
+let platformInfoCalls: number;
 let connectListeners: ((port: chrome.runtime.Port) => void)[];
 // The first API call waits for this, so later requests queue up behind it.
 let releaseFirstApiCall: () => void;
@@ -39,6 +40,7 @@ describe('background translation', () => {
     vi.resetModules();
     apiSignals = [];
     cacheReads = 0;
+    platformInfoCalls = 0;
     connectListeners = [];
     const firstApiGate = new Promise<void>((resolve) => {
       releaseFirstApiCall = resolve;
@@ -59,6 +61,10 @@ describe('background translation', () => {
       runtime: {
         onMessage: { addListener: () => {} },
         onConnect: { addListener: (listener: (port: chrome.runtime.Port) => void) => connectListeners.push(listener) },
+        getPlatformInfo: async () => {
+          platformInfoCalls++;
+          return {};
+        },
       },
       storage: {
         sync: { get: async () => ({}) },
@@ -85,6 +91,7 @@ describe('background translation', () => {
 
   afterEach(() => {
     releaseFirstApiCall();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -143,6 +150,24 @@ describe('background translation', () => {
     releaseFirstApiCall();
 
     await vi.waitFor(() => expect(contentPort.postedMessages).toEqual([{ dialogues: [] }]));
+  });
+
+  // Chrome stops the service worker 30 s into a fetch unless an extension API call resets its timer.
+  it('calls an extension API at least every 30 s while a translation runs, and stops after', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    await import('./index');
+    const contentPort = connectPort();
+    contentPort.send({ type: TRANSLATE_IMAGE, source: IMAGE_A });
+    await vi.waitFor(() => expect(apiSignals).toHaveLength(1));
+
+    vi.advanceTimersByTime(60_000);
+    expect(platformInfoCalls).toBeGreaterThanOrEqual(2);
+
+    releaseFirstApiCall();
+    await vi.waitFor(() => expect(contentPort.postedMessages).toHaveLength(1));
+    const callsWhenDone = platformInfoCalls;
+    vi.advanceTimersByTime(60_000);
+    expect(platformInfoCalls).toBe(callsWhenDone);
   });
 
   it('aborts the API request and posts nothing when the translation port disconnects', async () => {

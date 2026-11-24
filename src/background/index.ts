@@ -13,6 +13,9 @@ import { runWithReferer } from './referer';
 import { RetryableApiError, translateImage } from './translate';
 
 const MAX_CONCURRENT_FETCHES = 6;
+// Chrome stops the service worker 30 s into a fetch; an open port does not count as activity,
+// but an extension API call resets the timer.
+const KEEP_ALIVE_INTERVAL_MS = 20_000;
 
 // Lives until the service worker is terminated; caches failures (null) too.
 const fileSizeCache = new Map<string, Promise<number | null>>();
@@ -73,6 +76,7 @@ chrome.runtime.onConnect.addListener((port) => {
   // Content script cancelled, or its page closed or navigated away.
   port.onDisconnect.addListener(() => controller.abort());
   port.onMessage.addListener((message: TranslateImageMessage) => {
+    const keepAliveTimer = setInterval(() => void chrome.runtime.getPlatformInfo(), KEEP_ALIVE_INTERVAL_MS);
     void translateImage(message.source, port.sender?.url, controller.signal)
       .then(
         (dialogues): TranslateImageResponse => ({ dialogues }),
@@ -84,7 +88,8 @@ chrome.runtime.onConnect.addListener((port) => {
       .then((response) => {
         // Posting to a closed port throws.
         if (!controller.signal.aborted) port.postMessage(response);
-      });
+      })
+      .finally(() => clearInterval(keepAliveTimer));
   });
 });
 

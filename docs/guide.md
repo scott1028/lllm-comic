@@ -109,6 +109,8 @@ chrome.storage.local.get(null).then((items) =>
 
 service worker 一次只送一張圖，其他的排隊。輪到時會再查一次快取：同一張圖同時從兩個分頁送進來，第一個翻好後，第二個直接用結果，不會再呼叫 LLM。
 
+Chrome 會在 `fetch()` 等超過 30 秒、期間又沒有其他活動時停掉 service worker，而開著的 port 不算活動。所以翻譯還在進行時，service worker 每 20 秒呼叫一次 `chrome.runtime.getPlatformInfo()`，讓 LLM 慢慢回也不會被中斷。
+
 失敗時怎麼處理，要看是哪種錯誤：
 
 | 錯誤 | 標籤顯示 | 接下來 |
